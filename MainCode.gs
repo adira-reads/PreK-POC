@@ -1204,7 +1204,7 @@ function getStudentsByGroup(groupName) {
 
 /**
  * Gets all necessary data to build the assessment form for a student.
- * (This is a helper function for getFilteredAssessmentData)
+ * Works with Setup Wizard structure (headers row 1, data row 2+, skills column 2+).
  * @param {string} studentName The name of the selected student.
  * @param {string} program The student's program ('Pre-School' or 'Pre-K').
  * @returns {Object} An object { lessons: [], currentData: {} }.
@@ -1215,24 +1215,30 @@ function getStudentAssessmentData(studentName, program) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
     if (!sheet) throw new Error("Data sheet not found: " + sheetName);
 
-    // 1. Get Lesson Headers from HEADER_ROW
-    const headersRange = sheet.getRange(HEADER_ROW, 3, 1, sheet.getLastColumn() - 2);
-    const lessonHeaders = headersRange.getValues().flat().filter(h => h); // Get all non-blank headers
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 1) {
+      return { lessons: [], currentData: {} };
+    }
 
-    // 2. Find Student Row and Get Current Data
-    const studentNameColumn = sheet.getRange(DATA_START_ROW, 1, sheet.getLastRow() - DATA_START_ROW + 1, 1).getValues().flat();
-    const studentRowIndex = studentNameColumn.indexOf(studentName);
-    
+    // Headers are in row 1 (index 0), skills start at column 2 (index 1)
+    const allHeaders = data[0];
+    const lessonHeaders = allHeaders.slice(1).filter(h => h); // Skip "Name" column
+
+    // Find student row (data starts at row 2, index 1)
     let currentData = {};
-    let studentRow = -1;
+    let studentRowIndex = -1;
+
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === studentName) {
+        studentRowIndex = i;
+        break;
+      }
+    }
 
     if (studentRowIndex !== -1) {
-      studentRow = studentRowIndex + DATA_START_ROW; // Actual row number
-      const dataRange = sheet.getRange(studentRow, 3, 1, lessonHeaders.length);
-      const dataValues = dataRange.getValues().flat();
-      
+      const studentData = data[studentRowIndex];
       lessonHeaders.forEach((header, index) => {
-        currentData[header] = dataValues[index] || ''; // Store current value (Y, N, A, or blank)
+        currentData[header] = studentData[index + 1] || ''; // +1 to skip Name column
       });
     } else {
       Logger.log("Student not found in sheet: " + studentName);
@@ -1244,7 +1250,7 @@ function getStudentAssessmentData(studentName, program) {
     };
 
   } catch (e) {
-    Logger.log(e);
+    Logger.log("Error in getStudentAssessmentData: " + e);
     return { lessons: [], currentData: {} };
   }
 }
@@ -1252,33 +1258,44 @@ function getStudentAssessmentData(studentName, program) {
 
 /**
  * Saves the assessment data back to the sheet.
+ * Works with Setup Wizard structure (headers row 1, data row 2+).
  * @param {Object} data - The data from the form { studentName, program, assessments }.
  * @returns {string} A success or error message.
  */
 function saveAssessmentData(data) {
   const { studentName, program, assessments } = data;
-  
+
   try {
     const sheetName = (program === 'Pre-School') ? PRE_SCHOOL_SHEET_NAME : PRE_K_SHEET_NAME;
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
     if (!sheet) throw new Error("Data sheet not found: " + sheetName);
 
-    // 1. Find the student's row
-    const studentNameColumn = sheet.getRange(DATA_START_ROW, 1, sheet.getLastRow() - DATA_START_ROW + 1, 1).getValues().flat();
-    const studentRowIndex = studentNameColumn.indexOf(studentName);
-    
+    const sheetData = sheet.getDataRange().getValues();
+    if (sheetData.length < 2) {
+      return "Error: No data in sheet '" + sheetName + "'.";
+    }
+
+    // Headers are in row 1 (index 0)
+    const allHeaders = sheetData[0];
+
+    // Find the student's row (data starts at row 2, index 1)
+    let studentRowIndex = -1;
+    for (let i = 1; i < sheetData.length; i++) {
+      if (sheetData[i][0] === studentName) {
+        studentRowIndex = i;
+        break;
+      }
+    }
+
     if (studentRowIndex === -1) {
       return "Error: Student '" + studentName + "' not found in sheet '" + sheetName + "'.";
     }
-    const studentRow = studentRowIndex + DATA_START_ROW; // Actual row number
 
-    // 2. Get all headers to find column indexes
-    const headersRange = sheet.getRange(HEADER_ROW, 1, 1, sheet.getLastColumn());
-    const allHeaders = headersRange.getValues().flat();
+    const studentRow = studentRowIndex + 1; // Convert to 1-based row number
 
-    // 3. Get the whole row, update it, and write it back
+    // Get the whole row, update it, and write it back
     const rowRange = sheet.getRange(studentRow, 1, 1, sheet.getLastColumn());
-    const rowValues = rowRange.getValues()[0]; 
+    const rowValues = rowRange.getValues()[0];
 
     for (const [lessonName, status] of Object.entries(assessments)) {
       const colIndex = allHeaders.indexOf(lessonName);
@@ -1286,13 +1303,13 @@ function saveAssessmentData(data) {
         rowValues[colIndex] = status; // Update the value in our local array
       }
     }
-    
-    // Now write the entire updated array back to the row
-    rowRange.setValues([rowValues]); 
+
+    // Write the entire updated array back to the row
+    rowRange.setValues([rowValues]);
 
     return "Success! Data saved for " + studentName + ".";
   } catch (e) {
-    Logger.log(e);
+    Logger.log("Error in saveAssessmentData: " + e);
     return "Error: " + e.message;
   }
 }

@@ -723,6 +723,14 @@ function doGet(e) {
 }
 
 /**
+ * Returns the web app URL for navigation from HTML pages.
+ * Called from Portal.html to enable navigation between portals.
+ */
+function getWebAppUrl() {
+  return ScriptApp.getService().getUrl();
+}
+
+/**
  * Creates a custom menu in the spreadsheet when it opens.
  */
 function onOpen() {

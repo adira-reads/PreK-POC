@@ -306,13 +306,33 @@
     </footer>
 
     <script>
-        function navigateTo(page) {
-            const card = event.currentTarget;
-            card.classList.add('loading');
+        // Get the web app URL on page load
+        var webAppUrl = '';
 
-            // Get the base URL and navigate
-            const baseUrl = window.location.href.split('?')[0];
-            window.location.href = baseUrl + '?page=' + page;
+        google.script.run
+            .withSuccessHandler(function(url) {
+                webAppUrl = url;
+            })
+            .getWebAppUrl();
+
+        function navigateTo(page) {
+            // Add loading state
+            var cards = document.querySelectorAll('.portal-card');
+            cards.forEach(function(card) {
+                card.classList.add('loading');
+            });
+
+            // Navigate using the server-provided URL
+            if (webAppUrl) {
+                window.top.location.href = webAppUrl + '?page=' + page;
+            } else {
+                // Fallback: request URL and navigate
+                google.script.run
+                    .withSuccessHandler(function(url) {
+                        window.top.location.href = url + '?page=' + page;
+                    })
+                    .getWebAppUrl();
+            }
         }
     </script>
 </body>

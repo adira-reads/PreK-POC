@@ -32,6 +32,7 @@ const REPORT_FOLDER_ID = "1UsH17cwCWD2U5VVLxIRB88VxssbkK2GJ"; // Your Folder ID
 const TUTOR_SHEET_NAME = "Tutors";
 const TUTORS_SHEET_NAME = "Tutors"; // Alias for setup wizard
 const TUTOR_LOG_SHEET_NAME = "Tutor Log"; // Corrected name with space
+const SEQUENCE_SHEET_NAME = "Instructional Sequence"; // Letter teaching order
 
 // ====================================================================
 // ============ QUICK FIX FUNCTIONS (Run from Apps Script) ============
@@ -603,11 +604,78 @@ function createAllMissingSheets() {
     created.push('Pacing');
   }
 
+  // Instructional Sequence
+  if (!ss.getSheetByName(SEQUENCE_SHEET_NAME)) {
+    createInstructionalSequenceSheet(ss);
+    created.push('Instructional Sequence');
+  }
+
   if (created.length > 0) {
     SpreadsheetApp.getUi().alert('Created sheets:\n\n• ' + created.join('\n• '));
   } else {
     SpreadsheetApp.getUi().alert('All sheets already exist!');
   }
+}
+
+/**
+ * QUICK FIX: Creates or resets the Instructional Sequence sheet.
+ * Populates with default Handwriting Without Tears letter order.
+ * Run this from the Apps Script editor or via the menu.
+ */
+function setupInstructionalSequence() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  createInstructionalSequenceSheet(ss);
+  SpreadsheetApp.getUi().alert('Instructional Sequence sheet created/updated with default letter sets!');
+}
+
+/**
+ * Helper function to create the Instructional Sequence sheet.
+ * @param {Spreadsheet} ss The active spreadsheet.
+ */
+function createInstructionalSequenceSheet(ss) {
+  let sheet = ss.getSheetByName(SEQUENCE_SHEET_NAME);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(SEQUENCE_SHEET_NAME);
+  } else {
+    sheet.clear();
+  }
+
+  // Headers
+  const headers = ['Sequence Name', 'Letters', 'Notes'];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(1, 1, 1, headers.length)
+    .setFontWeight('bold')
+    .setBackground('#1E3A5F')
+    .setFontColor('white');
+
+  // Default data - Handwriting Without Tears recommended order
+  const defaultSequences = [
+    ['Set 1', 'A, M, S, T', 'Easy capitals - straight lines'],
+    ['Set 2', 'C, O, G, Q', 'Curved letters'],
+    ['Set 3', 'H, I, E, L', 'Lines and curves'],
+    ['Set 4', 'F, D, P, B', 'Trickier curves'],
+    ['Set 5', 'R, N, K, J', 'Diagonal lines'],
+    ['Set 6', 'U, V, W, X', 'More diagonals'],
+    ['Set 7', 'Y, Z', 'Final letters']
+  ];
+
+  sheet.getRange(2, 1, defaultSequences.length, 3).setValues(defaultSequences);
+
+  // Add alternating row colors for readability
+  for (let i = 0; i < defaultSequences.length; i++) {
+    const bgColor = (i % 2 === 0) ? '#F8FAFC' : '#FFFFFF';
+    sheet.getRange(i + 2, 1, 1, 3).setBackground(bgColor);
+  }
+
+  // Format and freeze
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, 3);
+  sheet.setColumnWidth(2, 150);
+  sheet.setColumnWidth(3, 250);
+
+  // Add a note to the header
+  sheet.getRange(1, 2).setNote('Enter letters separated by commas (e.g., "A, M, S, T")');
 }
 
 
@@ -673,6 +741,7 @@ function onOpen() {
       .addItem('Fix Pacing Progress', 'fixPacingSheetWithProgress')
       .addItem('Fix Summary Headers', 'fixSummaryHeaders')
       .addItem('Fix Pre-School Headers', 'fixPreSchoolHeaders')
+      .addItem('Setup Instructional Sequence', 'setupInstructionalSequence')
       .addItem('Create Missing Sheets', 'createAllMissingSheets'))
     .addToUi();
 }
@@ -1229,99 +1298,121 @@ function saveAssessmentData(data) {
 }
 
 /**
- * Gets the list of instructional sequences AND their corresponding letters for a specific group.
- * @param {string} groupName The group (e.g., "Goldfish").
+ * Gets the list of instructional sequences AND their corresponding letters.
+ * Reads from the "Instructional Sequence" sheet.
+ * @param {string} groupName The group name (used to get the program type from Roster).
  * @returns {object[]} A list of objects {sequenceName: string, letters: string}.
  */
-function getSequences(groupName) { // <-- Added groupName parameter
+function getSequences(groupName) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PACING_SHEET_NAME);
-    if (!sheet) throw new Error("Pacing sheet not found");
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const seqSheet = ss.getSheetByName(SEQUENCE_SHEET_NAME);
 
-    const data = sheet.getDataRange().getValues();
-    const sequences = [];
-
-    // Find the row for the group
-    const groupRowIndex = data.findIndex((row, index) => index >= 5 && row[0] === groupName); // Assumes groups start row 6 (index 5)
-    if (groupRowIndex === -1) {
-      Logger.log("Group '" + groupName + "' not found in Pacing sheet for sequence lookup.");
-      return []; // Return empty if group not found
+    if (!seqSheet) {
+      Logger.log("Instructional Sequence sheet not found. Using default sequence.");
+      // Return default sequences if sheet doesn't exist
+      return getDefaultSequences();
     }
 
-    // Loop through Row 4 (index 3) to find sequence names and their columns
-    const sequenceRow = data[3]; 
-    for (let colIndex = 0; colIndex < sequenceRow.length; colIndex++) {
-      const sequenceName = sequenceRow[colIndex];
-      // Check if it's a non-blank sequence name AND corresponds to a "Set" column (C, E, G...)
-      if (sequenceName && colIndex >= 2 && (colIndex % 2 === 0)) { 
-        const letters = data[groupRowIndex][colIndex] || ""; // Get letters from group's row, sequence's column
-        sequences.push({ sequenceName: sequenceName, letters: letters });
+    const data = seqSheet.getDataRange().getValues();
+    const sequences = [];
+
+    // Headers: Sequence Name, Letters, Notes (row 1)
+    // Data starts at row 2 (index 1)
+    for (let i = 1; i < data.length; i++) {
+      const sequenceName = data[i][0];
+      const letters = data[i][1];
+
+      if (sequenceName && letters) {
+        sequences.push({
+          sequenceName: sequenceName,
+          letters: letters.toString()
+        });
       }
     }
 
-    return sequences; // Return array of objects
+    if (sequences.length === 0) {
+      return getDefaultSequences();
+    }
+
+    return sequences;
 
   } catch (e) {
-    Logger.log(e);
-    return [];
+    Logger.log("Error in getSequences: " + e);
+    return getDefaultSequences();
   }
 }
 
 /**
+ * Returns default instructional sequences (Handwriting Without Tears order).
+ * Used when no Instructional Sequence sheet exists.
+ */
+function getDefaultSequences() {
+  return [
+    { sequenceName: "Set 1", letters: "A, M, S, T" },
+    { sequenceName: "Set 2", letters: "C, O, G, Q" },
+    { sequenceName: "Set 3", letters: "H, I, E, L" },
+    { sequenceName: "Set 4", letters: "F, D, P, B" },
+    { sequenceName: "Set 5", letters: "R, N, K, J" },
+    { sequenceName: "Set 6", letters: "U, V, W, X" },
+    { sequenceName: "Set 7", letters: "Y, Z" }
+  ];
+}
+
+/**
  * Gets the specific lesson names for a given group and sequence.
- * @param {string} groupName The group (e.g., "Goldfish").
- * @param {string} sequenceName The sequence (e.g., "Instructional Sequence 1").
- * @returns {string[]} A list of final lesson names (e.g., "A - Form", "Letter Sound B").
+ * @param {string} groupName The group (e.g., "Group A").
+ * @param {string} sequenceName The sequence (e.g., "Set 1").
+ * @returns {string[]} A list of final lesson names (e.g., "A-Form", "Letter Sound A").
  */
 function getLessonsForSequence(groupName, sequenceName) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PACING_SHEET_NAME);
-    if (!sheet) throw new Error("Pacing sheet not found");
-    
-    const data = sheet.getDataRange().getValues();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    // Find the row for the group
-    // Assumes group names start in Row 6 (index 5)
-    const groupRowIndex = data.findIndex((row, index) => index >= 5 && row[0] === groupName);
-    if (groupRowIndex === -1) {
-      throw new Error("Group '" + groupName + "' not found in Pacing sheet.");
-    }
-    
-    // Find the column for the sequence
-    // Assumes sequence names are in Row 4 (index 3)
-    const seqColIndex = data[3].indexOf(sequenceName);
-    if (seqColIndex === -1) {
-      throw new Error("Sequence '" + sequenceName + "' not found in Pacing sheet.");
+    // Get sequences to find the letters for this sequence
+    const sequences = getSequences(groupName);
+    const targetSequence = sequences.find(seq => seq.sequenceName === sequenceName);
+
+    if (!targetSequence || !targetSequence.letters) {
+      Logger.log("Sequence '" + sequenceName + "' not found or has no letters.");
+      return [];
     }
 
-    // Get the letters and program type from the found row
-    const lettersString = data[groupRowIndex][seqColIndex]; // e.g., "A, M, S, T"
-    const programString = data[groupRowIndex][1]; // e.g., "Letter Name, Letter Sound, Letter Form"
-    
-    if (!lettersString) {
-      return []; // No letters for this sequence
+    // Determine if this group is Pre-K or Pre-School from the Roster
+    const rosterSheet = ss.getSheetByName(ROSTER_SHEET_NAME);
+    let isPreK = true; // Default to Pre-K
+
+    if (rosterSheet) {
+      const rosterData = rosterSheet.getDataRange().getValues();
+      // Find a student in this group to determine the program
+      for (let i = 1; i < rosterData.length; i++) {
+        if (rosterData[i][1] === groupName) {
+          isPreK = rosterData[i][2] === "Pre-K";
+          break;
+        }
+      }
     }
 
-    const letters = lettersString.split(',').map(l => l.trim());
-    const isPreK = programString.includes("Form");
+    // Build lesson names from the letters
+    const letters = targetSequence.letters.split(',').map(l => l.trim());
     const builtLessons = [];
 
     letters.forEach(letter => {
       if (isPreK) {
-        // Format: "A - Form", "A - Name", "A - Sound"
-        builtLessons.push(letter + " - Form");
-        builtLessons.push(letter + " - Name");
-        builtLessons.push(letter + " - Sound");
+        // Pre-K format: "A-Form", "A-Name", "A-Sound"
+        builtLessons.push(letter + "-Form");
+        builtLessons.push(letter + "-Name");
+        builtLessons.push(letter + "-Sound");
       } else {
-        // Format: "Letter Sound A"
+        // Pre-School format: "Letter Sound A"
         builtLessons.push("Letter Sound " + letter);
       }
     });
-    
+
     return builtLessons;
-    
+
   } catch (e) {
-    Logger.log(e);
+    Logger.log("Error in getLessonsForSequence: " + e);
     return [];
   }
 }
@@ -1849,7 +1940,12 @@ function setupNewSite(data) {
     // 5. Initialize data sheets if needed
     initializeDataSheets(ss, data.programs.selected);
 
-    // 6. Update the spreadsheet name
+    // 6. Create Instructional Sequence sheet
+    if (!ss.getSheetByName(SEQUENCE_SHEET_NAME)) {
+      createInstructionalSequenceSheet(ss);
+    }
+
+    // 7. Update the spreadsheet name
     const siteName = data.site.name || 'New Site';
     ss.rename(`PreK Tracker - ${siteName}`);
 
@@ -1860,7 +1956,8 @@ function setupNewSite(data) {
         ✓ ${data.students.length} students added to roster<br>
         ✓ ${data.groups.length} groups configured<br>
         ✓ ${data.teachers.length + data.tutors.length} staff members added<br>
-        ✓ Programs: ${data.programs.selected.join(', ')}<br><br>
+        ✓ Programs: ${data.programs.selected.join(', ')}<br>
+        ✓ Instructional Sequence sheet created<br><br>
         You can now close this wizard and start using the tracker.
       `
     };
@@ -2185,13 +2282,16 @@ function generateTestData() {
   // 5. Initialize data sheets
   initializeDataSheets(ss, siteData.programs.selected);
 
-  // 6. Generate sample assessment data
+  // 6. Create Instructional Sequence sheet
+  createInstructionalSequenceSheet(ss);
+
+  // 7. Generate sample assessment data
   generateSampleAssessments(ss, studentNames);
 
-  // 7. Update summary
+  // 8. Update summary
   calculateAllSummaries();
 
-  // 8. Rename spreadsheet
+  // 9. Rename spreadsheet
   ss.rename('PreK Tracker - Central Library Branch (DEMO)');
 
   ui.alert(
@@ -2200,6 +2300,7 @@ function generateTestData() {
     '✓ 24 students across 4 groups\n' +
     '✓ 3 teachers and 6 tutors\n' +
     '✓ Sample assessment data\n' +
+    '✓ Instructional Sequence configured\n' +
     '✓ Summary calculations updated\n\n' +
     'You can now explore the Dashboard, run reports, and test all features!',
     ui.ButtonSet.OK

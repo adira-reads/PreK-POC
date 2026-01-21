@@ -41,6 +41,7 @@ const TUTOR_LOG_SHEET_NAME = "Tutor Log"; // Corrected name with space
  * Serves the correct HTML file based on a URL parameter.
  * ?page=tutor will load the TutorForm.
  * ?page=dashboard will load the Executive Dashboard.
+ * ?page=setup will load the Site Setup Wizard.
  * Anything else will load the main teacher form (Index.html).
  */
 function doGet(e) {
@@ -56,6 +57,11 @@ function doGet(e) {
     return HtmlService.createHtmlOutputFromFile('Dashboard')
       .setTitle('Executive Dashboard - Indianapolis Library PreK')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  } else if (page == "setup") {
+    // Site Setup Wizard
+    return HtmlService.createHtmlOutputFromFile('SetupWizard')
+      .setTitle('Site Setup Wizard - Indianapolis Library PreK')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   } else {
     // This is the main Teacher App
     return HtmlService.createHtmlOutputFromFile('Index')
@@ -69,7 +75,9 @@ function doGet(e) {
  */
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
-  ui.createMenu('Reports')
+  ui.createMenu('PreK Program')
+    .addItem('Site Setup Wizard', 'openSetupWizard')
+    .addSeparator()
     .addItem('Update Summary Page', 'calculateAllSummaries')
     .addItem('Update Pacing Sheet Colors', 'updatePacingSheetFormatting')
     .addSeparator()
@@ -90,6 +98,16 @@ function openDashboard() {
     '<script>window.open("' + url + '", "_blank");google.script.host.close();</script>'
   ).setWidth(200).setHeight(50);
   SpreadsheetApp.getUi().showModalDialog(html, 'Opening Dashboard...');
+}
+
+/**
+ * Opens the Site Setup Wizard in a sidebar or modal dialog.
+ */
+function openSetupWizard() {
+  const html = HtmlService.createHtmlOutputFromFile('SetupWizard')
+    .setWidth(900)
+    .setHeight(700);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Site Setup Wizard');
 }
 
 // ====================================================================
@@ -1213,6 +1231,271 @@ function exportProgressCSV() {
     'File "' + fileName + '" has been saved to your Google Drive.\n\nYou can also access it here:\n' + file.getUrl(),
     ui.ButtonSet.OK
   );
+}
+
+// ====================================================================
+// ============ SITE SETUP WIZARD FUNCTIONS ===========================
+// ====================================================================
+
+/**
+ * Processes the Setup Wizard data and configures the spreadsheet.
+ * @param {Object} data The wizard data containing site info, students, staff, etc.
+ * @returns {Object} Result object with success status and message.
+ */
+function setupNewSite(data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  try {
+    // 1. Store site configuration
+    setupSiteConfig(ss, data.site, data.programs, data.schedule);
+
+    // 2. Setup Roster sheet with students
+    setupRosterSheet(ss, data.students);
+
+    // 3. Setup Tutors sheet with staff
+    setupTutorsSheet(ss, data.teachers, data.tutors);
+
+    // 4. Setup Groups in Pacing sheet
+    setupPacingSheet(ss, data.groups, data.students);
+
+    // 5. Initialize data sheets if needed
+    initializeDataSheets(ss, data.programs.selected);
+
+    // 6. Update the spreadsheet name
+    const siteName = data.site.name || 'New Site';
+    ss.rename(`PreK Tracker - ${siteName}`);
+
+    return {
+      success: true,
+      message: `
+        <strong>Site "${siteName}" has been configured!</strong><br><br>
+        ✓ ${data.students.length} students added to roster<br>
+        ✓ ${data.groups.length} groups configured<br>
+        ✓ ${data.teachers.length + data.tutors.length} staff members added<br>
+        ✓ Programs: ${data.programs.selected.join(', ')}<br><br>
+        You can now close this wizard and start using the tracker.
+      `
+    };
+
+  } catch (error) {
+    Logger.log('Setup Error: ' + error.message);
+    return {
+      success: false,
+      message: 'Setup failed: ' + error.message
+    };
+  }
+}
+
+/**
+ * Creates or updates the Site Config sheet with site information.
+ */
+function setupSiteConfig(ss, site, programs, schedule) {
+  let configSheet = ss.getSheetByName('Site Config');
+
+  if (!configSheet) {
+    configSheet = ss.insertSheet('Site Config');
+  }
+
+  // Clear existing content
+  configSheet.clear();
+
+  // Set up configuration
+  const configData = [
+    ['Site Configuration', ''],
+    ['', ''],
+    ['Site Name', site.name || ''],
+    ['Site Code', site.code || ''],
+    ['Address', site.address || ''],
+    ['Phone', site.phone || ''],
+    ['Coordinator', site.coordinatorName || ''],
+    ['Coordinator Email', site.coordinatorEmail || ''],
+    ['', ''],
+    ['Program Configuration', ''],
+    ['Programs', programs.selected.join(', ')],
+    ['Academic Year', programs.academicYear || ''],
+    ['Start Date', programs.startDate || ''],
+    ['', ''],
+    ['Schedule', ''],
+    ['Sessions/Week', schedule.sessionsPerWeek || ''],
+    ['Session Duration', (schedule.sessionDuration || '') + ' minutes'],
+    ['Weekly Minutes', (schedule.sessionsPerWeek * schedule.sessionDuration) || ''],
+    ['Notes', schedule.notes || ''],
+    ['', ''],
+    ['Session Times', ''],
+    ['Monday', schedule.times.mon || ''],
+    ['Tuesday', schedule.times.tue || ''],
+    ['Wednesday', schedule.times.wed || ''],
+    ['Thursday', schedule.times.thu || ''],
+    ['Friday', schedule.times.fri || '']
+  ];
+
+  configSheet.getRange(1, 1, configData.length, 2).setValues(configData);
+
+  // Format headers
+  configSheet.getRange('A1').setFontWeight('bold').setFontSize(14);
+  configSheet.getRange('A10').setFontWeight('bold').setFontSize(12);
+  configSheet.getRange('A15').setFontWeight('bold').setFontSize(12);
+  configSheet.getRange('A21').setFontWeight('bold').setFontSize(12);
+
+  // Auto-resize columns
+  configSheet.autoResizeColumns(1, 2);
+}
+
+/**
+ * Sets up the Roster sheet with student data.
+ */
+function setupRosterSheet(ss, students) {
+  let rosterSheet = ss.getSheetByName(ROSTER_SHEET_NAME);
+
+  if (!rosterSheet) {
+    rosterSheet = ss.insertSheet(ROSTER_SHEET_NAME);
+    // Add headers
+    rosterSheet.getRange(1, 1, 1, 3).setValues([['Name', 'Group', 'Program']]);
+    rosterSheet.getRange(1, 1, 1, 3).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+  }
+
+  // Clear existing student data (keep header)
+  if (rosterSheet.getLastRow() > 1) {
+    rosterSheet.getRange(2, 1, rosterSheet.getLastRow() - 1, 3).clear();
+  }
+
+  // Add student data
+  if (students.length > 0) {
+    const studentData = students.map(s => [s.name, s.group, s.program]);
+    rosterSheet.getRange(2, 1, studentData.length, 3).setValues(studentData);
+  }
+
+  // Auto-resize columns
+  rosterSheet.autoResizeColumns(1, 3);
+}
+
+/**
+ * Sets up the Tutors sheet with staff data.
+ */
+function setupTutorsSheet(ss, teachers, tutors) {
+  let tutorsSheet = ss.getSheetByName(TUTORS_SHEET_NAME);
+
+  if (!tutorsSheet) {
+    tutorsSheet = ss.insertSheet(TUTORS_SHEET_NAME);
+    // Add headers
+    tutorsSheet.getRange(1, 1, 1, 2).setValues([['Name', 'Role']]);
+    tutorsSheet.getRange(1, 1, 1, 2).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+  }
+
+  // Clear existing data (keep header)
+  if (tutorsSheet.getLastRow() > 1) {
+    tutorsSheet.getRange(2, 1, tutorsSheet.getLastRow() - 1, 2).clear();
+  }
+
+  // Combine teachers and tutors
+  const staffData = [];
+  teachers.forEach(name => staffData.push([name, 'Teacher']));
+  tutors.forEach(name => staffData.push([name, 'Tutor']));
+
+  // Add staff data
+  if (staffData.length > 0) {
+    tutorsSheet.getRange(2, 1, staffData.length, 2).setValues(staffData);
+  }
+
+  // Auto-resize columns
+  tutorsSheet.autoResizeColumns(1, 2);
+}
+
+/**
+ * Sets up the Pacing sheet with groups.
+ */
+function setupPacingSheet(ss, groups, students) {
+  let pacingSheet = ss.getSheetByName(PACING_SHEET_NAME);
+
+  if (!pacingSheet) {
+    pacingSheet = ss.insertSheet(PACING_SHEET_NAME);
+  }
+
+  // Clear and setup headers
+  pacingSheet.clear();
+
+  // Header row: Group | Current Letter | Students...
+  const headerRow = ['Group', 'Current Letter', 'Student Count'];
+  pacingSheet.getRange(1, 1, 1, 3).setValues([headerRow]);
+  pacingSheet.getRange(1, 1, 1, 3).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+
+  // Add groups
+  const groupData = groups.map(group => {
+    const studentCount = students.filter(s => s.group === group).length;
+    return [group, 'A', studentCount];
+  });
+
+  if (groupData.length > 0) {
+    pacingSheet.getRange(2, 1, groupData.length, 3).setValues(groupData);
+  }
+
+  // Auto-resize columns
+  pacingSheet.autoResizeColumns(1, 3);
+}
+
+/**
+ * Initializes the data sheets (Pre-K, Pre-School) if they don't exist.
+ */
+function initializeDataSheets(ss, selectedPrograms) {
+  // Pre-K Sheet
+  if (selectedPrograms.includes('Pre-K')) {
+    let preKSheet = ss.getSheetByName(PRE_K_SHEET_NAME);
+    if (!preKSheet) {
+      preKSheet = ss.insertSheet(PRE_K_SHEET_NAME);
+      // Setup headers: Name, A-Form, A-Name, A-Sound, B-Form, B-Name, B-Sound, etc.
+      const headers = ['Name'];
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      letters.forEach(letter => {
+        headers.push(`${letter}-Form`, `${letter}-Name`, `${letter}-Sound`);
+      });
+      preKSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      preKSheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+      preKSheet.setFrozenRows(1);
+      preKSheet.setFrozenColumns(1);
+    }
+  }
+
+  // Pre-School Sheet
+  if (selectedPrograms.includes('Pre-School')) {
+    let preSchoolSheet = ss.getSheetByName(PRE_SCHOOL_SHEET_NAME);
+    if (!preSchoolSheet) {
+      preSchoolSheet = ss.insertSheet(PRE_SCHOOL_SHEET_NAME);
+      // Setup headers: Name, A, B, C, etc.
+      const headers = ['Name'];
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      headers.push(...letters);
+      preSchoolSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      preSchoolSheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+      preSchoolSheet.setFrozenRows(1);
+      preSchoolSheet.setFrozenColumns(1);
+    }
+  }
+
+  // Skill Summary Page
+  let summarySheet = ss.getSheetByName(SUMMARY_SHEET_NAME);
+  if (!summarySheet) {
+    summarySheet = ss.insertSheet(SUMMARY_SHEET_NAME);
+    const headers = [
+      'Name', 'Program',
+      'Pre-School In-Progress', 'Pre-School Cumulative',
+      'Form In-Progress', 'Form Cumulative',
+      'Name In-Progress', 'Name Cumulative',
+      'Sound In-Progress', 'Sound Cumulative'
+    ];
+    summarySheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    summarySheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+    summarySheet.setFrozenRows(1);
+  }
+
+  // Tutor Log
+  let tutorLogSheet = ss.getSheetByName(TUTOR_LOG_SHEET_NAME);
+  if (!tutorLogSheet) {
+    tutorLogSheet = ss.insertSheet(TUTOR_LOG_SHEET_NAME);
+    const headers = ['Timestamp', 'Tutor', 'Student', 'Program', 'Letter', 'Name Status', 'Sound Status', 'Notes'];
+    tutorLogSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    tutorLogSheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+    tutorLogSheet.setFrozenRows(1);
+  }
 }
 
 // ====================================================================

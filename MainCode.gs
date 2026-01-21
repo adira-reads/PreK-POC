@@ -95,6 +95,37 @@ function fixPreSchoolHeaders() {
 }
 
 /**
+ * QUICK FIX: Updates the Skill Summary Page headers to correct format.
+ * Run this to fix an existing Skill Summary Page.
+ */
+function fixSummaryHeaders() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const summarySheet = ss.getSheetByName(SUMMARY_SHEET_NAME);
+
+  if (!summarySheet) {
+    SpreadsheetApp.getUi().alert('Skill Summary Page not found!');
+    return;
+  }
+
+  const headers = [
+    'Name', 'Program',
+    'Pre-School Letter Sound In-Progress', 'Pre-School Letter Sound Cumulative',
+    'Pre-K Form In-Progress', 'Pre-K Form Cumulative',
+    'Pre-K Name In-Progress', 'Pre-K Name Cumulative',
+    'Pre-K Sound In-Progress', 'Pre-K Sound Cumulative'
+  ];
+
+  summarySheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  summarySheet.getRange(1, 1, 1, headers.length)
+    .setFontWeight('bold')
+    .setBackground('#1E3A5F')
+    .setFontColor('white');
+  summarySheet.autoResizeColumns(1, headers.length);
+
+  SpreadsheetApp.getUi().alert('Skill Summary Page headers updated!');
+}
+
+/**
  * QUICK FIX: Creates any missing sheets (Pre-K, Pre-School, Summary, etc.)
  * Run this directly from the Apps Script editor.
  */
@@ -133,12 +164,15 @@ function createAllMissingSheets() {
   // Skill Summary Page
   if (!ss.getSheetByName(SUMMARY_SHEET_NAME)) {
     const sheet = ss.insertSheet(SUMMARY_SHEET_NAME);
-    const headers = ['Name', 'Program', 'Pre-School In-Progress', 'Pre-School Cumulative',
-      'Form In-Progress', 'Form Cumulative', 'Name In-Progress', 'Name Cumulative',
-      'Sound In-Progress', 'Sound Cumulative'];
+    const headers = ['Name', 'Program',
+      'Pre-School Letter Sound In-Progress', 'Pre-School Letter Sound Cumulative',
+      'Pre-K Form In-Progress', 'Pre-K Form Cumulative',
+      'Pre-K Name In-Progress', 'Pre-K Name Cumulative',
+      'Pre-K Sound In-Progress', 'Pre-K Sound Cumulative'];
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
     sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, headers.length);
     created.push('Skill Summary Page');
   }
 
@@ -1632,14 +1666,15 @@ function initializeDataSheets(ss, selectedPrograms) {
     summarySheet = ss.insertSheet(SUMMARY_SHEET_NAME);
     const headers = [
       'Name', 'Program',
-      'Pre-School In-Progress', 'Pre-School Cumulative',
-      'Form In-Progress', 'Form Cumulative',
-      'Name In-Progress', 'Name Cumulative',
-      'Sound In-Progress', 'Sound Cumulative'
+      'Pre-School Letter Sound In-Progress', 'Pre-School Letter Sound Cumulative',
+      'Pre-K Form In-Progress', 'Pre-K Form Cumulative',
+      'Pre-K Name In-Progress', 'Pre-K Name Cumulative',
+      'Pre-K Sound In-Progress', 'Pre-K Sound Cumulative'
     ];
     summarySheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     summarySheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
     summarySheet.setFrozenRows(1);
+    summarySheet.autoResizeColumns(1, headers.length);
   }
 
   // Tutor Log

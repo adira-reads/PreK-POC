@@ -86,6 +86,10 @@ function onOpen() {
     .addSeparator()
     .addItem('Generate Enhanced Parent Reports (Visual)', 'generateEnhancedParentReports')
     .addItem('Generate Basic Parent Reports (Doc)', 'generateParentReports')
+    .addSeparator()
+    .addSubMenu(ui.createMenu('Demo & Testing')
+      .addItem('Generate Test Data', 'generateTestData')
+      .addItem('Clear All Data', 'clearAllData'))
     .addToUi();
 }
 
@@ -1496,6 +1500,275 @@ function initializeDataSheets(ss, selectedPrograms) {
     tutorLogSheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
     tutorLogSheet.setFrozenRows(1);
   }
+}
+
+// ====================================================================
+// ============ TEST DATA GENERATOR ===================================
+// ====================================================================
+
+/**
+ * Generates sample test data for demonstration purposes.
+ * Creates a complete demo site with students, staff, and assessment data.
+ */
+function generateTestData() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    'Generate Test Data',
+    'This will create a demo site "Central Library Branch" with:\n\n' +
+    '• 24 sample students across 4 groups\n' +
+    '• 3 teachers and 6 tutors\n' +
+    '• Sample assessment data for all students\n\n' +
+    'This will overwrite existing data. Continue?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (response !== ui.Button.YES) return;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Sample data
+  const siteData = {
+    site: {
+      name: 'Central Library Branch',
+      code: 'CLB',
+      address: '40 E St Clair St, Indianapolis, IN 46204',
+      phone: '(317) 275-4100',
+      coordinatorName: 'Sarah Mitchell',
+      coordinatorEmail: 's.mitchell@indypl.org'
+    },
+    programs: {
+      selected: ['Pre-K', 'Pre-School'],
+      academicYear: '2025-2026',
+      startDate: '2025-09-02'
+    },
+    schedule: {
+      sessionsPerWeek: 3,
+      sessionDuration: 45,
+      times: { mon: '09:00', tue: '', wed: '09:00', thu: '', fri: '09:00' },
+      notes: 'Monday/Wednesday/Friday morning sessions'
+    }
+  };
+
+  // Sample student names (diverse and realistic)
+  const studentNames = [
+    // Group A - Pre-K
+    { name: 'Emma Rodriguez', group: 'Group A', program: 'Pre-K' },
+    { name: 'Liam Johnson', group: 'Group A', program: 'Pre-K' },
+    { name: 'Olivia Williams', group: 'Group A', program: 'Pre-K' },
+    { name: 'Noah Brown', group: 'Group A', program: 'Pre-K' },
+    { name: 'Ava Davis', group: 'Group A', program: 'Pre-K' },
+    { name: 'Elijah Miller', group: 'Group A', program: 'Pre-K' },
+    // Group B - Pre-K
+    { name: 'Sophia Garcia', group: 'Group B', program: 'Pre-K' },
+    { name: 'James Martinez', group: 'Group B', program: 'Pre-K' },
+    { name: 'Isabella Anderson', group: 'Group B', program: 'Pre-K' },
+    { name: 'Benjamin Taylor', group: 'Group B', program: 'Pre-K' },
+    { name: 'Mia Thomas', group: 'Group B', program: 'Pre-K' },
+    { name: 'Lucas Jackson', group: 'Group B', program: 'Pre-K' },
+    // Group C - Pre-School
+    { name: 'Charlotte White', group: 'Group C', program: 'Pre-School' },
+    { name: 'Henry Harris', group: 'Group C', program: 'Pre-School' },
+    { name: 'Amelia Clark', group: 'Group C', program: 'Pre-School' },
+    { name: 'Alexander Lewis', group: 'Group C', program: 'Pre-School' },
+    { name: 'Harper Walker', group: 'Group C', program: 'Pre-School' },
+    { name: 'Sebastian Hall', group: 'Group C', program: 'Pre-School' },
+    // Group D - Pre-School
+    { name: 'Evelyn Allen', group: 'Group D', program: 'Pre-School' },
+    { name: 'Jack Young', group: 'Group D', program: 'Pre-School' },
+    { name: 'Luna King', group: 'Group D', program: 'Pre-School' },
+    { name: 'Owen Wright', group: 'Group D', program: 'Pre-School' },
+    { name: 'Camila Scott', group: 'Group D', program: 'Pre-School' },
+    { name: 'Daniel Green', group: 'Group D', program: 'Pre-School' }
+  ];
+
+  const teachers = ['Ms. Jennifer Adams', 'Mr. Robert Chen', 'Ms. Maria Santos'];
+  const tutors = ['David Kim', 'Ashley Thompson', 'Marcus Williams', 'Rachel Lee', 'Kevin Patel', 'Nicole Brown'];
+  const groups = ['Group A', 'Group B', 'Group C', 'Group D'];
+
+  // 1. Setup site config
+  setupSiteConfig(ss, siteData.site, siteData.programs, siteData.schedule);
+
+  // 2. Setup roster
+  setupRosterSheet(ss, studentNames);
+
+  // 3. Setup staff
+  setupTutorsSheet(ss, teachers, tutors);
+
+  // 4. Setup pacing
+  setupPacingSheet(ss, groups, studentNames);
+
+  // 5. Initialize data sheets
+  initializeDataSheets(ss, siteData.programs.selected);
+
+  // 6. Generate sample assessment data
+  generateSampleAssessments(ss, studentNames);
+
+  // 7. Update summary
+  calculateAllSummaries();
+
+  // 8. Rename spreadsheet
+  ss.rename('PreK Tracker - Central Library Branch (DEMO)');
+
+  ui.alert(
+    'Test Data Generated!',
+    'Demo site "Central Library Branch" has been created with:\n\n' +
+    '✓ 24 students across 4 groups\n' +
+    '✓ 3 teachers and 6 tutors\n' +
+    '✓ Sample assessment data\n' +
+    '✓ Summary calculations updated\n\n' +
+    'You can now explore the Dashboard, run reports, and test all features!',
+    ui.ButtonSet.OK
+  );
+}
+
+/**
+ * Generates sample assessment data for all students.
+ */
+function generateSampleAssessments(ss, students) {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+  // Pre-K students get Form, Name, Sound assessments
+  const preKSheet = ss.getSheetByName(PRE_K_SHEET_NAME);
+  if (preKSheet) {
+    const preKStudents = students.filter(s => s.program === 'Pre-K');
+    const preKData = preKStudents.map((student, idx) => {
+      const row = [student.name];
+      // Each student has completed different amounts (simulate progress)
+      const completedLetters = 8 + Math.floor(idx * 1.5); // 8-26 letters completed
+      const masteryRate = 0.65 + (Math.random() * 0.3); // 65-95% mastery rate
+
+      letters.forEach((letter, letterIdx) => {
+        if (letterIdx < completedLetters) {
+          // Completed - assign Y or N based on mastery rate
+          const formResult = Math.random() < masteryRate ? 'Y' : 'N';
+          const nameResult = Math.random() < masteryRate ? 'Y' : 'N';
+          const soundResult = Math.random() < (masteryRate - 0.1) ? 'Y' : 'N'; // Sound slightly harder
+          row.push(formResult, nameResult, soundResult);
+        } else {
+          // Not yet assessed
+          row.push('', '', '');
+        }
+      });
+      return row;
+    });
+
+    if (preKData.length > 0) {
+      preKSheet.getRange(2, 1, preKData.length, preKData[0].length).setValues(preKData);
+    }
+  }
+
+  // Pre-School students get Sound assessments only
+  const preSchoolSheet = ss.getSheetByName(PRE_SCHOOL_SHEET_NAME);
+  if (preSchoolSheet) {
+    const preSchoolStudents = students.filter(s => s.program === 'Pre-School');
+    const preSchoolData = preSchoolStudents.map((student, idx) => {
+      const row = [student.name];
+      const completedLetters = 6 + Math.floor(idx * 1.2); // 6-20 letters completed
+      const masteryRate = 0.60 + (Math.random() * 0.35); // 60-95% mastery rate
+
+      letters.forEach((letter, letterIdx) => {
+        if (letterIdx < completedLetters) {
+          row.push(Math.random() < masteryRate ? 'Y' : 'N');
+        } else {
+          row.push('');
+        }
+      });
+      return row;
+    });
+
+    if (preSchoolData.length > 0) {
+      preSchoolSheet.getRange(2, 1, preSchoolData.length, preSchoolData[0].length).setValues(preSchoolData);
+    }
+  }
+
+  // Generate some tutor log entries
+  const tutorLogSheet = ss.getSheetByName(TUTOR_LOG_SHEET_NAME);
+  if (tutorLogSheet) {
+    const tutors = ['David Kim', 'Ashley Thompson', 'Marcus Williams', 'Rachel Lee'];
+    const sampleLogs = [];
+
+    // Generate 20 sample log entries over the past 2 weeks
+    for (let i = 0; i < 20; i++) {
+      const daysAgo = Math.floor(Math.random() * 14);
+      const date = new Date();
+      date.setDate(date.getDate() - daysAgo);
+
+      const student = students[Math.floor(Math.random() * students.length)];
+      const tutor = tutors[Math.floor(Math.random() * tutors.length)];
+      const letterIdx = Math.floor(Math.random() * 15);
+      const letter = letters[letterIdx];
+
+      sampleLogs.push([
+        date,
+        tutor,
+        student.name,
+        student.program,
+        letter,
+        Math.random() < 0.75 ? 'Y' : 'N',
+        Math.random() < 0.70 ? 'Y' : 'N',
+        ''
+      ]);
+    }
+
+    // Sort by date descending
+    sampleLogs.sort((a, b) => b[0] - a[0]);
+
+    if (sampleLogs.length > 0) {
+      tutorLogSheet.getRange(2, 1, sampleLogs.length, 8).setValues(sampleLogs);
+    }
+  }
+}
+
+/**
+ * Clears all test data and resets the spreadsheet.
+ */
+function clearAllData() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    'Clear All Data',
+    'This will DELETE all data from:\n\n' +
+    '• Roster\n' +
+    '• Pre-K assessments\n' +
+    '• Pre-School assessments\n' +
+    '• Skill Summary\n' +
+    '• Tutor Log\n' +
+    '• Site Config\n\n' +
+    'This cannot be undone. Are you sure?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (response !== ui.Button.YES) return;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Clear each sheet (keep headers)
+  const sheetsToClear = [
+    { name: ROSTER_SHEET_NAME, headerRows: 1 },
+    { name: PRE_K_SHEET_NAME, headerRows: 1 },
+    { name: PRE_SCHOOL_SHEET_NAME, headerRows: 1 },
+    { name: SUMMARY_SHEET_NAME, headerRows: 1 },
+    { name: TUTOR_LOG_SHEET_NAME, headerRows: 1 },
+    { name: TUTORS_SHEET_NAME, headerRows: 1 },
+    { name: PACING_SHEET_NAME, headerRows: 1 }
+  ];
+
+  sheetsToClear.forEach(config => {
+    const sheet = ss.getSheetByName(config.name);
+    if (sheet && sheet.getLastRow() > config.headerRows) {
+      sheet.getRange(config.headerRows + 1, 1, sheet.getLastRow() - config.headerRows, sheet.getLastColumn()).clear();
+    }
+  });
+
+  // Delete Site Config sheet
+  const configSheet = ss.getSheetByName('Site Config');
+  if (configSheet) {
+    ss.deleteSheet(configSheet);
+  }
+
+  // Reset spreadsheet name
+  ss.rename('PreK Assessment Tracker');
+
+  ui.alert('All Data Cleared', 'The spreadsheet has been reset. Use the Setup Wizard to configure a new site.', ui.ButtonSet.OK);
 }
 
 // ====================================================================

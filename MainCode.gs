@@ -256,6 +256,53 @@ function fixCalculateSummaries() {
 }
 
 /**
+ * QUICK FIX: Simplified pacing sheet update for Setup Wizard structure.
+ * The original updatePacingSheetFormatting expects row 6 data, but Setup Wizard uses row 2.
+ * This function just updates the student count per group.
+ */
+function fixUpdatePacingSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const pacingSheet = ss.getSheetByName(PACING_SHEET_NAME);
+  const rosterSheet = ss.getSheetByName(ROSTER_SHEET_NAME);
+
+  if (!pacingSheet || !rosterSheet) {
+    SpreadsheetApp.getUi().alert("Error: Pacing or Roster sheet not found.");
+    return;
+  }
+
+  // Get roster data to count students per group
+  const rosterData = rosterSheet.getDataRange().getValues();
+  const groupCounts = new Map();
+
+  // Count students per group (skip header row)
+  for (let i = 1; i < rosterData.length; i++) {
+    const group = rosterData[i][1]; // Column B is Group
+    if (group) {
+      groupCounts.set(group, (groupCounts.get(group) || 0) + 1);
+    }
+  }
+
+  // Get pacing data (headers in row 1, data starts row 2)
+  const pacingData = pacingSheet.getDataRange().getValues();
+
+  if (pacingData.length < 2) {
+    SpreadsheetApp.getUi().alert("No data in Pacing sheet.");
+    return;
+  }
+
+  // Update student counts in column C (index 2)
+  for (let i = 1; i < pacingData.length; i++) {
+    const groupName = pacingData[i][0];
+    if (groupName) {
+      const count = groupCounts.get(groupName) || 0;
+      pacingSheet.getRange(i + 1, 3).setValue(count); // Row i+1, Column C
+    }
+  }
+
+  SpreadsheetApp.getUi().alert("Pacing sheet updated with student counts!");
+}
+
+/**
  * QUICK FIX: Creates any missing sheets (Pre-K, Pre-School, Summary, etc.)
  * Run this directly from the Apps Script editor.
  */

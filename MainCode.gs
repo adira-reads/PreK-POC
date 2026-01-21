@@ -685,18 +685,24 @@ function createInstructionalSequenceSheet(ss) {
 
 /**
  * Serves the correct HTML file based on a URL parameter.
- * ?page=tutor will load the TutorForm.
- * ?page=dashboard will load the Executive Dashboard.
- * ?page=setup will load the Site Setup Wizard.
- * Anything else will load the main teacher form (Index.html).
+ * No parameter = Portal (landing page)
+ * ?page=teacher = Teacher Portal (Index.html)
+ * ?page=tutor = Tutor Portal (TutorForm.html)
+ * ?page=dashboard = Executive Dashboard
+ * ?page=setup = Site Setup Wizard
  */
 function doGet(e) {
   var page = e.parameter.page;
 
-  if (page == "tutor") {
-    // This is the Tutor App
+  if (page == "teacher") {
+    // Teacher Portal
+    return HtmlService.createHtmlOutputFromFile('Index')
+      .setTitle('Teacher Portal - Indianapolis Library PreK')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  } else if (page == "tutor") {
+    // Tutor Portal
     return HtmlService.createHtmlOutputFromFile('TutorForm')
-      .setTitle('Tutor Session Tracker')
+      .setTitle('Tutor Portal - Indianapolis Library PreK')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   } else if (page == "dashboard") {
     // Executive Dashboard
@@ -709,9 +715,9 @@ function doGet(e) {
       .setTitle('Site Setup Wizard - Indianapolis Library PreK')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   } else {
-    // This is the main Teacher App
-    return HtmlService.createHtmlOutputFromFile('Index')
-      .setTitle('Student Assessment Tracker')
+    // Default: Portal landing page
+    return HtmlService.createHtmlOutputFromFile('Portal')
+      .setTitle('PreK Literacy Program - Indianapolis Public Library')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 }

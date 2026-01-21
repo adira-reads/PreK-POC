@@ -303,6 +303,222 @@ function fixUpdatePacingSheet() {
 }
 
 /**
+ * QUICK FIX: Comprehensive Pacing sheet update with actual progress data.
+ * Restructures the Pacing sheet to show meaningful progress metrics per group.
+ * Run this from the Apps Script editor to fix Pacing display issues.
+ */
+function fixPacingSheetWithProgress() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const pacingSheet = ss.getSheetByName(PACING_SHEET_NAME);
+  const rosterSheet = ss.getSheetByName(ROSTER_SHEET_NAME);
+  const preKSheet = ss.getSheetByName(PRE_K_SHEET_NAME);
+  const preSchoolSheet = ss.getSheetByName(PRE_SCHOOL_SHEET_NAME);
+
+  if (!pacingSheet || !rosterSheet) {
+    SpreadsheetApp.getUi().alert("Error: Pacing or Roster sheet not found.");
+    return;
+  }
+
+  // Get roster data: Map group -> {students: [], programs: Set}
+  const rosterData = rosterSheet.getDataRange().getValues();
+  const groupInfo = new Map();
+
+  for (let i = 1; i < rosterData.length; i++) {
+    const studentName = rosterData[i][0];
+    const groupName = rosterData[i][1];
+    const program = rosterData[i][2];
+
+    if (!studentName || !groupName) continue;
+
+    if (!groupInfo.has(groupName)) {
+      groupInfo.set(groupName, { students: [], programs: new Set() });
+    }
+    groupInfo.get(groupName).students.push({ name: studentName, program: program });
+    groupInfo.get(groupName).programs.add(program);
+  }
+
+  // Get Pre-K assessment data (headers row 1, data row 2+)
+  let preKMap = new Map();
+  let preKHeaders = [];
+  if (preKSheet) {
+    const pkData = preKSheet.getDataRange().getValues();
+    if (pkData.length > 0) {
+      preKHeaders = pkData[0];
+      for (let i = 1; i < pkData.length; i++) {
+        if (pkData[i][0]) preKMap.set(pkData[i][0], pkData[i]);
+      }
+    }
+  }
+
+  // Get Pre-School assessment data (headers row 1, data row 2+)
+  let preSchoolMap = new Map();
+  let preSchoolHeaders = [];
+  if (preSchoolSheet) {
+    const psData = preSchoolSheet.getDataRange().getValues();
+    if (psData.length > 0) {
+      preSchoolHeaders = psData[0];
+      for (let i = 1; i < psData.length; i++) {
+        if (psData[i][0]) preSchoolMap.set(psData[i][0], psData[i]);
+      }
+    }
+  }
+
+  // Clear and rebuild Pacing sheet
+  pacingSheet.clear();
+
+  // New headers with progress columns
+  const headers = [
+    'Group', 'Students', 'Program(s)', 'Current Letter',
+    'Form %', 'Name %', 'Sound %', 'Pre-School %', 'Overall %'
+  ];
+
+  pacingSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  pacingSheet.getRange(1, 1, 1, headers.length)
+    .setFontWeight('bold')
+    .setBackground('#1E3A5F')
+    .setFontColor('white');
+
+  // Build data rows for each group
+  const outputData = [];
+  const colorData = [];
+
+  for (const [groupName, info] of groupInfo) {
+    const studentCount = info.students.length;
+    const programs = Array.from(info.programs).join(', ');
+
+    // Calculate progress for each skill
+    let formTotal = 0, formComplete = 0;
+    let nameTotal = 0, nameComplete = 0;
+    let soundTotal = 0, soundComplete = 0;
+    let psTotal = 0, psComplete = 0;
+    let currentLetter = 'A';
+    let maxLetterIndex = 0;
+
+    for (const student of info.students) {
+      if (student.program === 'Pre-K') {
+        const studentData = preKMap.get(student.name);
+        if (studentData) {
+          // Count Form, Name, Sound progress (columns like A-Form, A-Name, A-Sound)
+          for (let c = 1; c < preKHeaders.length; c++) {
+            const header = preKHeaders[c];
+            const value = studentData[c];
+            const isComplete = (value === 'Y' || value === 'y');
+            const isAssessed = (value === 'Y' || value === 'y' || value === 'N' || value === 'n');
+
+            if (header && header.includes('-Form')) {
+              formTotal++;
+              if (isComplete) formComplete++;
+              // Track progress through letters
+              if (isAssessed) {
+                const letterMatch = header.match(/^([A-Z])-Form/);
+                if (letterMatch) {
+                  const letterIndex = letterMatch[1].charCodeAt(0) - 65;
+                  if (letterIndex > maxLetterIndex) maxLetterIndex = letterIndex;
+                }
+              }
+            } else if (header && header.includes('-Name')) {
+              nameTotal++;
+              if (isComplete) nameComplete++;
+            } else if (header && header.includes('-Sound')) {
+              soundTotal++;
+              if (isComplete) soundComplete++;
+            }
+          }
+        }
+      } else if (student.program === 'Pre-School') {
+        const studentData = preSchoolMap.get(student.name);
+        if (studentData) {
+          // Count Letter Sound progress
+          for (let c = 1; c < preSchoolHeaders.length; c++) {
+            const value = studentData[c];
+            const isComplete = (value === 'Y' || value === 'y');
+            const isAssessed = (value === 'Y' || value === 'y' || value === 'N' || value === 'n');
+
+            psTotal++;
+            if (isComplete) psComplete++;
+
+            // Track progress through letters
+            if (isAssessed && preSchoolHeaders[c]) {
+              const letterMatch = preSchoolHeaders[c].match(/Letter Sound ([A-Z])/);
+              if (letterMatch) {
+                const letterIndex = letterMatch[1].charCodeAt(0) - 65;
+                if (letterIndex > maxLetterIndex) maxLetterIndex = letterIndex;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Calculate percentages
+    const formPct = formTotal > 0 ? Math.round((formComplete / formTotal) * 100) : 0;
+    const namePct = nameTotal > 0 ? Math.round((nameComplete / nameTotal) * 100) : 0;
+    const soundPct = soundTotal > 0 ? Math.round((soundComplete / soundTotal) * 100) : 0;
+    const psPct = psTotal > 0 ? Math.round((psComplete / psTotal) * 100) : 0;
+
+    // Calculate overall based on what programs are active
+    let overallPct = 0;
+    let overallCount = 0;
+    if (formTotal > 0) { overallPct += formPct; overallCount++; }
+    if (nameTotal > 0) { overallPct += namePct; overallCount++; }
+    if (soundTotal > 0) { overallPct += soundPct; overallCount++; }
+    if (psTotal > 0) { overallPct += psPct; overallCount++; }
+    overallPct = overallCount > 0 ? Math.round(overallPct / overallCount) : 0;
+
+    // Determine current letter based on progress
+    currentLetter = String.fromCharCode(65 + Math.min(maxLetterIndex, 25));
+
+    outputData.push([
+      groupName,
+      studentCount,
+      programs,
+      currentLetter,
+      formTotal > 0 ? formPct + '%' : '-',
+      nameTotal > 0 ? namePct + '%' : '-',
+      soundTotal > 0 ? soundPct + '%' : '-',
+      psTotal > 0 ? psPct + '%' : '-',
+      overallPct + '%'
+    ]);
+
+    // Color coding based on overall progress
+    colorData.push(getProgressColor(overallPct));
+  }
+
+  // Write data
+  if (outputData.length > 0) {
+    pacingSheet.getRange(2, 1, outputData.length, headers.length).setValues(outputData);
+
+    // Apply conditional color formatting to the Overall % column
+    for (let i = 0; i < colorData.length; i++) {
+      pacingSheet.getRange(i + 2, 9).setBackground(colorData[i]); // Column I (Overall %)
+
+      // Also color the individual skill columns based on their percentages
+      const row = outputData[i];
+      if (row[4] !== '-') pacingSheet.getRange(i + 2, 5).setBackground(getProgressColor(parseInt(row[4])));
+      if (row[5] !== '-') pacingSheet.getRange(i + 2, 6).setBackground(getProgressColor(parseInt(row[5])));
+      if (row[6] !== '-') pacingSheet.getRange(i + 2, 7).setBackground(getProgressColor(parseInt(row[6])));
+      if (row[7] !== '-') pacingSheet.getRange(i + 2, 8).setBackground(getProgressColor(parseInt(row[7])));
+    }
+  }
+
+  // Auto-resize and format
+  pacingSheet.autoResizeColumns(1, headers.length);
+  pacingSheet.setFrozenRows(1);
+
+  SpreadsheetApp.getUi().alert("Pacing sheet updated with progress data!");
+}
+
+/**
+ * Helper function to get background color based on progress percentage.
+ */
+function getProgressColor(percentage) {
+  if (percentage >= 80) return '#d9ead3'; // Light green (excellent)
+  if (percentage >= 50) return '#fff2cc'; // Light yellow (good progress)
+  if (percentage >= 20) return '#fce5cd'; // Light orange (needs work)
+  return '#f4cccc'; // Light red (just started)
+}
+
+/**
  * QUICK FIX: Creates any missing sheets (Pre-K, Pre-School, Summary, etc.)
  * Run this directly from the Apps Script editor.
  */
@@ -441,7 +657,7 @@ function onOpen() {
     .addItem('Site Setup Wizard', 'openSetupWizard')
     .addSeparator()
     .addItem('Update Summary Page', 'calculateAllSummaries')
-    .addItem('Update Pacing Sheet Colors', 'updatePacingSheetFormatting')
+    .addItem('Update Pacing Progress', 'fixPacingSheetWithProgress')
     .addSeparator()
     .addItem('Open Executive Dashboard', 'openDashboard')
     .addItem('Export Progress Report (CSV)', 'exportProgressCSV')
@@ -452,6 +668,12 @@ function onOpen() {
     .addSubMenu(ui.createMenu('Demo & Testing')
       .addItem('Generate Test Data', 'generateTestData')
       .addItem('Clear All Data', 'clearAllData'))
+    .addSubMenu(ui.createMenu('Quick Fixes')
+      .addItem('Fix Summary Data', 'fixCalculateSummaries')
+      .addItem('Fix Pacing Progress', 'fixPacingSheetWithProgress')
+      .addItem('Fix Summary Headers', 'fixSummaryHeaders')
+      .addItem('Fix Pre-School Headers', 'fixPreSchoolHeaders')
+      .addItem('Create Missing Sheets', 'createAllMissingSheets'))
     .addToUi();
 }
 

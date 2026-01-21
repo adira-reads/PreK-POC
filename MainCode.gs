@@ -30,6 +30,7 @@ const REPORT_FOLDER_ID = "1UsH17cwCWD2U5VVLxIRB88VxssbkK2GJ"; // Your Folder ID
 
 // --- TUTOR APP CONFIGURATION ---
 const TUTOR_SHEET_NAME = "Tutors";
+const TUTORS_SHEET_NAME = "Tutors"; // Alias for setup wizard
 const TUTOR_LOG_SHEET_NAME = "Tutor Log"; // Corrected name with space
 
 

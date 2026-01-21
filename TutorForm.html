@@ -5,22 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Tutor Session Tracker - East 10th Street</title>
+    <title>Tutor Session Tracker - Indianapolis Library PreK</title>
     <base target="_top">
     
     <style>
-        /* CSS Variables for easy theming */
+        /* CSS Variables - Indianapolis Library Branding */
         :root {
-            --primary-color: #007AFF;
-            --success-color: #34C759;
-            --warning-color: #FF9500;
-            --danger-color: #FF3B30;
-            --secondary-color: #8E8E93;
-            --background: #F2F2F7;
+            --primary-color: #1E3A5F;
+            --primary-light: #2E5A8F;
+            --accent-color: #E8B923;
+            --success-color: #22C55E;
+            --warning-color: #F59E0B;
+            --danger-color: #EF4444;
+            --secondary-color: #64748B;
+            --background: #F8FAFC;
             --card-background: #FFFFFF;
-            --text-primary: #1C1C1E;
-            --text-secondary: #8E8E93;
-            --border-color: #E5E5EA;
+            --text-primary: #1E293B;
+            --text-secondary: #64748B;
+            --border-color: #E2E8F0;
             --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
             --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
             --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -43,28 +45,56 @@
             padding-bottom: env(safe-area-inset-bottom);
         }
 
-        /* Header */
+        /* Header - Indianapolis Library Branding */
         .header {
-            background: linear-gradient(135deg, #FF9500 0%, #FF5E3A 100%);
-            color: white;
-            padding: 2rem 1.5rem 1.5rem;
+            background: linear-gradient(135deg, var(--accent-color) 0%, #D4A520 100%);
+            color: var(--primary-color);
+            padding: 1.25rem 1.5rem;
             box-shadow: var(--shadow-md);
             position: sticky;
             top: 0;
             z-index: 100;
         }
 
-        .header h1 {
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 1024px;
+            margin: 0 auto;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .header-logo {
             font-size: 1.75rem;
+        }
+
+        .header h1 {
+            font-size: 1.25rem;
             font-weight: 700;
             letter-spacing: -0.5px;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.125rem;
         }
 
         .header .subtitle {
-            font-size: 1rem;
-            opacity: 0.95;
-            font-weight: 400;
+            font-size: 0.8rem;
+            opacity: 0.8;
+            font-weight: 500;
+        }
+
+        .header-badge {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.35rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            white-space: nowrap;
         }
 
         /* Container */
@@ -129,9 +159,10 @@
             width: 24px;
             height: 24px;
             border-radius: 50%;
-            background: var(--warning-color);
-            color: white;
+            background: var(--accent-color);
+            color: var(--primary-color);
             font-size: 0.75rem;
+            font-weight: 700;
             margin-right: 0.5rem;
         }
 
@@ -558,8 +589,16 @@
 </head>
 <body>
     <header class="header">
-        <h1>Tutor Session Tracker</h1>
-        <div class="subtitle">East 10th Street • Letter Recognition Progress</div>
+        <div class="header-content">
+            <div class="header-brand">
+                <span class="header-logo">✏️</span>
+                <div>
+                    <h1>Tutor Session Tracker</h1>
+                    <div class="subtitle">Indianapolis Public Library PreK Program</div>
+                </div>
+            </div>
+            <div class="header-badge">Tutor Portal</div>
+        </div>
     </header>
 
     <div class="container">

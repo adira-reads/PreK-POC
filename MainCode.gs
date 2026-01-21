@@ -40,15 +40,21 @@ const TUTOR_LOG_SHEET_NAME = "Tutor Log"; // Corrected name with space
 /**
  * Serves the correct HTML file based on a URL parameter.
  * ?page=tutor will load the TutorForm.
+ * ?page=dashboard will load the Executive Dashboard.
  * Anything else will load the main teacher form (Index.html).
  */
 function doGet(e) {
   var page = e.parameter.page;
-  
+
   if (page == "tutor") {
     // This is the Tutor App
     return HtmlService.createHtmlOutputFromFile('TutorForm')
       .setTitle('Tutor Session Tracker')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  } else if (page == "dashboard") {
+    // Executive Dashboard
+    return HtmlService.createHtmlOutputFromFile('Dashboard')
+      .setTitle('Executive Dashboard - Indianapolis Library PreK')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   } else {
     // This is the main Teacher App
@@ -66,9 +72,24 @@ function onOpen() {
   ui.createMenu('Reports')
     .addItem('Update Summary Page', 'calculateAllSummaries')
     .addItem('Update Pacing Sheet Colors', 'updatePacingSheetFormatting')
-    .addSeparator() 
-    .addItem('Generate All Parent Reports', 'generateParentReports')
+    .addSeparator()
+    .addItem('Open Executive Dashboard', 'openDashboard')
+    .addItem('Export Progress Report (CSV)', 'exportProgressCSV')
+    .addSeparator()
+    .addItem('Generate Enhanced Parent Reports (Visual)', 'generateEnhancedParentReports')
+    .addItem('Generate Basic Parent Reports (Doc)', 'generateParentReports')
     .addToUi();
+}
+
+/**
+ * Opens the Executive Dashboard in a new browser tab.
+ */
+function openDashboard() {
+  const url = ScriptApp.getService().getUrl() + '?page=dashboard';
+  const html = HtmlService.createHtmlOutput(
+    '<script>window.open("' + url + '", "_blank");google.script.host.close();</script>'
+  ).setWidth(200).setHeight(50);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Opening Dashboard...');
 }
 
 // ====================================================================
@@ -953,15 +974,462 @@ function getNeedsWorkLetters(studentName, program) {
 function getTutorLessonList(studentName, program) {
   const allLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('');
   const needsWorkLetters = getNeedsWorkLetters(studentName, program);
-  
+
   // Create a Set of the "needs work" letters for fast lookup
   const needsWorkSet = new Set(needsWorkLetters);
-  
+
   // Filter allLetters to get only the ones NOT in the needsWorkSet
   const otherLetters = allLetters.filter(letter => !needsWorkSet.has(letter));
-  
+
   return {
     needsWork: needsWorkLetters,
     otherLetters: otherLetters
   };
+}
+
+// ====================================================================
+// ============ EXECUTIVE DASHBOARD FUNCTIONS =========================
+// ====================================================================
+
+/**
+ * Gets all data needed for the Executive Dashboard.
+ * @returns {Object} Dashboard data including stats, charts data, and student list.
+ */
+function getDashboardData() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rosterSheet = ss.getSheetByName(ROSTER_SHEET_NAME);
+  const summarySheet = ss.getSheetByName(SUMMARY_SHEET_NAME);
+  const preKSheet = ss.getSheetByName(PRE_K_SHEET_NAME);
+  const preSchoolSheet = ss.getSheetByName(PRE_SCHOOL_SHEET_NAME);
+
+  // Get roster data (Name, Group, Program)
+  const rosterData = rosterSheet.getRange(2, 1, rosterSheet.getLastRow() - 1, 3).getValues();
+
+  // Create maps for quick lookup
+  const studentMap = new Map(); // Map<Name, {group, program}>
+  let preSchoolCount = 0;
+  let preKCount = 0;
+  const groupSet = new Set();
+
+  rosterData.forEach(row => {
+    const name = row[0];
+    const group = row[1];
+    const program = row[2];
+    if (name) {
+      studentMap.set(name, { group, program });
+      groupSet.add(group);
+      if (program === 'Pre-School') preSchoolCount++;
+      else if (program === 'Pre-K') preKCount++;
+    }
+  });
+
+  // Get summary data if available
+  let summaryData = [];
+  if (summarySheet && summarySheet.getLastRow() >= SUMMARY_START_ROW) {
+    summaryData = summarySheet.getRange(SUMMARY_START_ROW, 1, summarySheet.getLastRow() - SUMMARY_START_ROW + 1, SUMMARY_LAST_COL).getValues();
+  }
+
+  // Calculate statistics
+  let totalMastery = 0;
+  let totalProgress = 0;
+  let masteredCount = 0;
+  let progressingCount = 0;
+  let beginningCount = 0;
+  let totalLettersAssessed = 0;
+  let studentsWithData = 0;
+
+  // Skill-specific stats
+  let formTotal = 0, formCount = 0;
+  let nameTotal = 0, nameCount = 0;
+  let soundTotal = 0, soundCount = 0;
+
+  // Group progress
+  const groupProgress = new Map(); // Map<GroupName, {total, count}>
+
+  const studentResults = [];
+
+  summaryData.forEach(row => {
+    const studentName = row[0];
+    const studentInfo = studentMap.get(studentName);
+    if (!studentName || !studentInfo) return;
+
+    const program = studentInfo.program;
+    const group = studentInfo.group;
+
+    let mastery = 0;
+    let progress = 0;
+    let lettersCount = 0;
+
+    if (program === 'Pre-School') {
+      // Pre-School: Columns C (in-progress) and D (cumulative)
+      mastery = (row[2] || 0) * 100;
+      progress = (row[3] || 0) * 100;
+      soundTotal += row[2] || 0;
+      soundCount++;
+    } else if (program === 'Pre-K') {
+      // Pre-K: Form (E,F), Name (G,H), Sound (I,J)
+      const formMastery = row[4] || 0;
+      const nameMastery = row[6] || 0;
+      const soundMastery = row[8] || 0;
+      const formCum = row[5] || 0;
+      const nameCum = row[7] || 0;
+      const soundCum = row[9] || 0;
+
+      mastery = ((formMastery + nameMastery + soundMastery) / 3) * 100;
+      progress = ((formCum + nameCum + soundCum) / 3) * 100;
+
+      if (formMastery > 0) { formTotal += formMastery; formCount++; }
+      if (nameMastery > 0) { nameTotal += nameMastery; nameCount++; }
+      if (soundMastery > 0) { soundTotal += soundMastery; soundCount++; }
+    }
+
+    // Count letters assessed (rough estimate based on cumulative)
+    lettersCount = Math.round((progress / 100) * TOTAL_LESSONS);
+
+    if (mastery > 0 || progress > 0) {
+      studentsWithData++;
+      totalMastery += mastery;
+      totalProgress += progress;
+      totalLettersAssessed += lettersCount;
+
+      // Mastery distribution
+      if (mastery >= 80) masteredCount++;
+      else if (mastery >= 50) progressingCount++;
+      else beginningCount++;
+
+      // Group progress
+      if (!groupProgress.has(group)) {
+        groupProgress.set(group, { total: 0, count: 0 });
+      }
+      const gp = groupProgress.get(group);
+      gp.total += progress;
+      gp.count++;
+    }
+
+    studentResults.push({
+      name: studentName,
+      group: group,
+      program: program,
+      progress: Math.round(progress),
+      mastery: Math.round(mastery)
+    });
+  });
+
+  // Calculate averages
+  const avgMastery = studentsWithData > 0 ? Math.round(totalMastery / studentsWithData) : 0;
+  const avgLetters = studentsWithData > 0 ? Math.round(totalLettersAssessed / studentsWithData) : 0;
+
+  // Skills averages (Pre-K)
+  const formAvg = formCount > 0 ? Math.round((formTotal / formCount) * 100) : 0;
+  const nameAvg = nameCount > 0 ? Math.round((nameTotal / nameCount) * 100) : 0;
+  const soundAvg = soundCount > 0 ? Math.round((soundTotal / soundCount) * 100) : 0;
+
+  // Group progress array
+  const groupProgressArray = [];
+  groupProgress.forEach((value, key) => {
+    groupProgressArray.push({
+      name: key,
+      avgProgress: value.count > 0 ? Math.round(value.total / value.count) : 0
+    });
+  });
+  groupProgressArray.sort((a, b) => b.avgProgress - a.avgProgress);
+
+  // Sort students by progress descending
+  studentResults.sort((a, b) => b.progress - a.progress);
+
+  return {
+    stats: {
+      totalStudents: studentMap.size,
+      avgMastery: avgMastery,
+      lettersAssessed: avgLetters,
+      totalGroups: groupSet.size
+    },
+    programBreakdown: {
+      preSchool: preSchoolCount,
+      preK: preKCount
+    },
+    masteryDistribution: {
+      mastered: masteredCount,
+      progressing: progressingCount,
+      beginning: beginningCount
+    },
+    skillsProgress: {
+      form: formAvg,
+      name: nameAvg,
+      sound: soundAvg
+    },
+    groupProgress: groupProgressArray,
+    students: studentResults
+  };
+}
+
+/**
+ * Creates a CSV download and returns the blob URL.
+ * @param {string} csvContent The CSV content string.
+ * @param {string} fileName The desired filename.
+ * @returns {string|null} The download URL or null.
+ */
+function createCSVDownload(csvContent, fileName) {
+  try {
+    const blob = Utilities.newBlob(csvContent, 'text/csv', fileName);
+    const file = DriveApp.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    const url = file.getDownloadUrl();
+    // Clean up after 1 minute (let user download)
+    Utilities.sleep(60000);
+    try { file.setTrashed(true); } catch(e) {}
+    return url;
+  } catch (e) {
+    Logger.log('CSV Download Error: ' + e.message);
+    return null;
+  }
+}
+
+/**
+ * Exports the progress report as a CSV file from the spreadsheet menu.
+ */
+function exportProgressCSV() {
+  const data = getDashboardData();
+  if (!data || !data.students || data.students.length === 0) {
+    SpreadsheetApp.getUi().alert('No student data found to export.');
+    return;
+  }
+
+  // Build CSV
+  const headers = ['Student Name', 'Group', 'Program', 'Progress %', 'Mastery %'];
+  const rows = data.students.map(s =>
+    [s.name, s.group, s.program, s.progress, s.mastery].join(',')
+  );
+  const csvContent = [headers.join(','), ...rows].join('\n');
+
+  // Create file in Drive
+  const fileName = 'PreK_Progress_Report_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd') + '.csv';
+  const blob = Utilities.newBlob(csvContent, 'text/csv', fileName);
+  const file = DriveApp.createFile(blob);
+
+  const ui = SpreadsheetApp.getUi();
+  ui.alert(
+    'Export Complete!',
+    'File "' + fileName + '" has been saved to your Google Drive.\n\nYou can also access it here:\n' + file.getUrl(),
+    ui.ButtonSet.OK
+  );
+}
+
+// ====================================================================
+// ============ ENHANCED PARENT REPORT FUNCTIONS ======================
+// ====================================================================
+
+/**
+ * Generates beautiful HTML-based parent reports for all students.
+ * Creates individual HTML files that can be printed or shared as PDFs.
+ */
+function generateEnhancedParentReports() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const summarySheet = ss.getSheetByName(SUMMARY_SHEET_NAME);
+  const rosterSheet = ss.getSheetByName(ROSTER_SHEET_NAME);
+
+  if (!summarySheet || !rosterSheet) {
+    SpreadsheetApp.getUi().alert("Error: 'Skill Summary Page' or 'Roster' sheet not found.");
+    return;
+  }
+
+  // Get the template HTML
+  const template = HtmlService.createHtmlOutputFromFile('ParentReport').getContent();
+
+  // Get or create output folder
+  let outputFolder;
+  try {
+    outputFolder = DriveApp.getFolderById(REPORT_FOLDER_ID);
+  } catch (e) {
+    // Create a new folder if the configured one doesn't exist
+    outputFolder = DriveApp.createFolder('PreK Parent Reports - ' + new Date().toLocaleDateString());
+  }
+
+  // Get all data from sheets
+  const summaryData = summarySheet.getRange(SUMMARY_START_ROW, 1, summarySheet.getLastRow() - SUMMARY_START_ROW + 1, SUMMARY_LAST_COL).getValues();
+  const rosterData = rosterSheet.getRange(2, 1, rosterSheet.getLastRow() - 1, 3).getValues();
+
+  // Create maps
+  const rosterMap = new Map(rosterData.map(row => [row[0], { group: row[1], program: row[2] }]));
+
+  const ui = SpreadsheetApp.getUi();
+  ui.alert("Starting Enhanced Report Generation", "Creating beautiful progress reports for all students. This may take a few minutes.", ui.ButtonSet.OK);
+
+  let filesCreated = 0;
+  const currentDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM d, yyyy');
+
+  for (const row of summaryData) {
+    const studentName = row[0];
+    if (!studentName) continue;
+
+    const studentInfo = rosterMap.get(studentName);
+    if (!studentInfo) continue;
+
+    const program = studentInfo.program || "Unknown";
+    const isPreK = program === 'Pre-K';
+
+    // Get percentage values
+    let overallMastery, formMastery, formCum, nameMastery, nameCum, soundMastery, soundCum, psMastery, psCum;
+
+    if (isPreK) {
+      formMastery = Math.round((row[4] || 0) * 100);
+      formCum = Math.round((row[5] || 0) * 100);
+      nameMastery = Math.round((row[6] || 0) * 100);
+      nameCum = Math.round((row[7] || 0) * 100);
+      soundMastery = Math.round((row[8] || 0) * 100);
+      soundCum = Math.round((row[9] || 0) * 100);
+      overallMastery = Math.round((formMastery + nameMastery + soundMastery) / 3);
+    } else {
+      psMastery = Math.round((row[2] || 0) * 100);
+      psCum = Math.round((row[3] || 0) * 100);
+      overallMastery = psMastery;
+    }
+
+    // Calculate ring offset (314.159 is circumference for r=50)
+    const ringOffset = 314.159 - (314.159 * overallMastery / 100);
+
+    // Determine encouragement based on mastery level
+    let encouragementIcon, encouragementTitle, encouragementText;
+    if (overallMastery >= 80) {
+      encouragementIcon = "🌟";
+      encouragementTitle = "Outstanding Progress!";
+      encouragementText = studentName.split(' ')[0] + " is doing an amazing job! Keep up the wonderful work at home by practicing letter recognition together.";
+    } else if (overallMastery >= 60) {
+      encouragementIcon = "🎯";
+      encouragementTitle = "Great Progress!";
+      encouragementText = studentName.split(' ')[0] + " is making excellent progress! Continue supporting their learning journey with fun letter activities at home.";
+    } else if (overallMastery >= 40) {
+      encouragementIcon = "📚";
+      encouragementTitle = "Building Strong Foundations!";
+      encouragementText = studentName.split(' ')[0] + " is developing important skills! Practice makes perfect - try pointing out letters during everyday activities.";
+    } else {
+      encouragementIcon = "🌱";
+      encouragementTitle = "Growing Every Day!";
+      encouragementText = studentName.split(' ')[0] + " is learning new things every day! Keep encouraging them - every small step counts on this learning journey.";
+    }
+
+    // Determine progress message
+    let progressMessage, progressDetail;
+    if (overallMastery >= 80) {
+      progressMessage = "Excellent Progress!";
+      progressDetail = studentName.split(' ')[0] + " has mastered most of the skills introduced so far and is well-prepared for continued success.";
+    } else if (overallMastery >= 60) {
+      progressMessage = "Strong Progress!";
+      progressDetail = studentName.split(' ')[0] + " is performing well and consistently improving in letter recognition skills.";
+    } else if (overallMastery >= 40) {
+      progressMessage = "Steady Progress!";
+      progressDetail = studentName.split(' ')[0] + " is building foundational skills and making consistent progress with our curriculum.";
+    } else {
+      progressMessage = "Building Skills!";
+      progressDetail = studentName.split(' ')[0] + " is working hard to develop early literacy skills. Every lesson brings new learning!";
+    }
+
+    // Helper function for skill class
+    function getSkillClass(mastery) {
+      if (mastery >= 80) return 'high';
+      if (mastery >= 50) return 'medium';
+      return 'low';
+    }
+
+    // Replace all placeholders
+    let reportHtml = template
+      .replace(/\{\{StudentName\}\}/g, studentName)
+      .replace(/\{\{Program\}\}/g, program)
+      .replace(/\{\{Date\}\}/g, currentDate)
+      .replace(/\{\{OverallMastery\}\}/g, overallMastery)
+      .replace(/\{\{OverallOffset\}\}/g, ringOffset)
+      .replace(/\{\{ProgressMessage\}\}/g, progressMessage)
+      .replace(/\{\{ProgressDetail\}\}/g, progressDetail)
+      .replace(/\{\{EncouragementIcon\}\}/g, encouragementIcon)
+      .replace(/\{\{EncouragementTitle\}\}/g, encouragementTitle)
+      .replace(/\{\{EncouragementText\}\}/g, encouragementText);
+
+    if (isPreK) {
+      reportHtml = reportHtml
+        .replace(/\{\{PreKDisplay\}\}/g, '')
+        .replace(/\{\{PreSchoolDisplay\}\}/g, 'display:none')
+        .replace(/\{\{FormMastery\}\}/g, formMastery)
+        .replace(/\{\{FormCumulative\}\}/g, formCum)
+        .replace(/\{\{FormClass\}\}/g, getSkillClass(formMastery))
+        .replace(/\{\{NameMastery\}\}/g, nameMastery)
+        .replace(/\{\{NameCumulative\}\}/g, nameCum)
+        .replace(/\{\{NameClass\}\}/g, getSkillClass(nameMastery))
+        .replace(/\{\{SoundMastery\}\}/g, soundMastery)
+        .replace(/\{\{SoundCumulative\}\}/g, soundCum)
+        .replace(/\{\{SoundClass\}\}/g, getSkillClass(soundMastery));
+    } else {
+      reportHtml = reportHtml
+        .replace(/\{\{PreKDisplay\}\}/g, 'display:none')
+        .replace(/\{\{PreSchoolDisplay\}\}/g, '')
+        .replace(/\{\{PSMastery\}\}/g, psMastery)
+        .replace(/\{\{PSCumulative\}\}/g, psCum)
+        .replace(/\{\{PSClass\}\}/g, getSkillClass(psMastery));
+    }
+
+    // Create the HTML file
+    const fileName = `${studentName} - Progress Report.html`;
+    const blob = Utilities.newBlob(reportHtml, 'text/html', fileName);
+    outputFolder.createFile(blob);
+    filesCreated++;
+  }
+
+  ui.alert(
+    "Report Generation Complete!",
+    `${filesCreated} enhanced progress reports have been created.\n\nYou can find them in your Google Drive folder:\n${outputFolder.getUrl()}\n\nTip: Open each HTML file in Chrome and use "Print > Save as PDF" for beautiful PDF reports!`,
+    ui.ButtonSet.OK
+  );
+}
+
+/**
+ * Gets a preview of a single student's enhanced report (for web app use).
+ */
+function getParentReportPreview(studentName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const summarySheet = ss.getSheetByName(SUMMARY_SHEET_NAME);
+  const rosterSheet = ss.getSheetByName(ROSTER_SHEET_NAME);
+
+  if (!summarySheet || !rosterSheet) {
+    return { error: "Required sheets not found" };
+  }
+
+  // Find student in roster
+  const rosterData = rosterSheet.getRange(2, 1, rosterSheet.getLastRow() - 1, 3).getValues();
+  const studentRoster = rosterData.find(row => row[0] === studentName);
+  if (!studentRoster) {
+    return { error: "Student not found in roster" };
+  }
+
+  const program = studentRoster[2];
+  const isPreK = program === 'Pre-K';
+
+  // Find student in summary
+  const summaryData = summarySheet.getRange(SUMMARY_START_ROW, 1, summarySheet.getLastRow() - SUMMARY_START_ROW + 1, SUMMARY_LAST_COL).getValues();
+  const studentSummary = summaryData.find(row => row[0] === studentName);
+
+  if (!studentSummary) {
+    return { error: "Student not found in summary. Please update the Summary Page first." };
+  }
+
+  // Calculate values
+  let data = {
+    studentName: studentName,
+    program: program,
+    date: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM d, yyyy')
+  };
+
+  if (isPreK) {
+    data.formMastery = Math.round((studentSummary[4] || 0) * 100);
+    data.formCumulative = Math.round((studentSummary[5] || 0) * 100);
+    data.nameMastery = Math.round((studentSummary[6] || 0) * 100);
+    data.nameCumulative = Math.round((studentSummary[7] || 0) * 100);
+    data.soundMastery = Math.round((studentSummary[8] || 0) * 100);
+    data.soundCumulative = Math.round((studentSummary[9] || 0) * 100);
+    data.overallMastery = Math.round((data.formMastery + data.nameMastery + data.soundMastery) / 3);
+  } else {
+    data.psMastery = Math.round((studentSummary[2] || 0) * 100);
+    data.psCumulative = Math.round((studentSummary[3] || 0) * 100);
+    data.overallMastery = data.psMastery;
+  }
+
+  return data;
 }

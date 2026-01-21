@@ -433,7 +433,7 @@ function createAllMissingSheets() {
   // Tutor Log
   if (!ss.getSheetByName(TUTOR_LOG_SHEET_NAME)) {
     const sheet = ss.insertSheet(TUTOR_LOG_SHEET_NAME);
-    const headers = ['Timestamp', 'Tutor', 'Student', 'Program', 'Letter', 'Name Status', 'Sound Status', 'Notes'];
+    const headers = ['Timestamp', 'Tutor', 'Student', 'Program', 'Letter', 'Form Status', 'Name Status', 'Sound Status', 'Notes'];
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
     sheet.setFrozenRows(1);
@@ -1304,17 +1304,18 @@ function getStudentRoster() {
 /**
  * Saves the tutor's lesson data to the "TutorLog" sheet
  * AND updates the main student data sheet ("Pre-K" or "Pre-School").
- * @param {Object} data - {tutor, student, program, lesson, nameStatus, soundStatus}
+ * Works with Setup Wizard structure (headers row 1, data row 2+).
+ * @param {Object} data - {tutor, student, program, lesson, formStatus, nameStatus, soundStatus}
  * @returns {string} A success or error message.
  */
 function saveTutorSession(data) {
-  const { tutor, student, program, lesson, nameStatus, soundStatus } = data;
+  const { tutor, student, program, lesson, formStatus, nameStatus, soundStatus } = data;
 
-  // --- Step 1: Log the session (as before) ---
+  // --- Step 1: Log the session ---
   try {
     const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TUTOR_LOG_SHEET_NAME);
     if (logSheet) {
-      logSheet.appendRow([tutor, student, new Date(), lesson, nameStatus, soundStatus, "Present"]);
+      logSheet.appendRow([new Date(), tutor, student, program, lesson, formStatus || "", nameStatus || "", soundStatus || "", ""]);
     } else {
       Logger.log("Tutor Log sheet not found. Skipping log.");
     }
@@ -1329,19 +1330,29 @@ function saveTutorSession(data) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
     if (!sheet) throw new Error("Student data sheet not found: " + sheetName);
 
-    // Find the student's row
-    const studentNameColumn = sheet.getRange(DATA_START_ROW, 1, sheet.getLastRow() - DATA_START_ROW + 1, 1).getValues().flat();
-    const studentRowIndex = studentNameColumn.indexOf(student);
+    // Get all data (headers row 1, data row 2+)
+    const sheetData = sheet.getDataRange().getValues();
+    if (sheetData.length < 2) {
+      return "Success! Session logged. (No student data in sheet).";
+    }
+
+    const allHeaders = sheetData[0]; // Row 1 headers
+
+    // Find the student's row (data starts at index 1)
+    let studentRowIndex = -1;
+    for (let i = 1; i < sheetData.length; i++) {
+      if (sheetData[i][0] === student) {
+        studentRowIndex = i;
+        break;
+      }
+    }
+
     if (studentRowIndex === -1) {
-      // Log an error but don't stop the user; the log was successful.
       Logger.log("Student '" + student + "' not found in sheet '" + sheetName + "'. Skipping main sheet update.");
       return "Success! Session saved to log. (Student not found in main sheet for update).";
     }
-    const studentRow = studentRowIndex + DATA_START_ROW;
 
-    // Get all headers (Row 5)
-    const headersRange = sheet.getRange(HEADER_ROW, 1, 1, sheet.getLastColumn());
-    const allHeaders = headersRange.getValues().flat();
+    const studentRow = studentRowIndex + 1; // Convert to 1-based row number
 
     // Get the whole row's data
     const rowRange = sheet.getRange(studentRow, 1, 1, sheet.getLastColumn());
@@ -1349,11 +1360,25 @@ function saveTutorSession(data) {
 
     // Define the target columns based on the program
     // `lesson` is just the letter, e.g., "A"
-    let nameColName = isPreK ? `${lesson} - Name` : null; 
-    let soundColName = isPreK ? `${lesson} - Sound` : `Letter Sound ${lesson}`;
+    // Pre-K headers: A-Form, A-Name, A-Sound
+    // Pre-School headers: Letter Sound A
+    let formColName = isPreK ? `${lesson}-Form` : null;
+    let nameColName = isPreK ? `${lesson}-Name` : null;
+    let soundColName = isPreK ? `${lesson}-Sound` : `Letter Sound ${lesson}`;
 
-    // Find and update Letter Name (if applicable and data was provided)
-    if (isPreK && nameStatus) { // Only update if Pre-K and status is Y/N
+    // Find and update Letter Form (if Pre-K and data was provided)
+    if (isPreK && formStatus) {
+      const colIndex = allHeaders.indexOf(formColName);
+      if (colIndex !== -1) {
+        rowValues[colIndex] = formStatus;
+        Logger.log(`Updated ${student} -> ${formColName} to ${formStatus}`);
+      } else {
+        Logger.log(`Column not found: ${formColName}`);
+      }
+    }
+
+    // Find and update Letter Name (if Pre-K and data was provided)
+    if (isPreK && nameStatus) {
       const colIndex = allHeaders.indexOf(nameColName);
       if (colIndex !== -1) {
         rowValues[colIndex] = nameStatus;
@@ -1364,7 +1389,7 @@ function saveTutorSession(data) {
     }
 
     // Find and update Letter Sound (if data was provided)
-    if (soundStatus) { // Always update sound if status is Y/N
+    if (soundStatus) {
       const colIndex = allHeaders.indexOf(soundColName);
       if (colIndex !== -1) {
         rowValues[colIndex] = soundStatus;
@@ -1375,7 +1400,7 @@ function saveTutorSession(data) {
     }
 
     // Write the updated row back to the sheet
-    rowRange.setValues([rowValues]); 
+    rowRange.setValues([rowValues]);
 
     return "Success! Session saved and student sheet updated.";
     
@@ -1986,7 +2011,7 @@ function initializeDataSheets(ss, selectedPrograms) {
   let tutorLogSheet = ss.getSheetByName(TUTOR_LOG_SHEET_NAME);
   if (!tutorLogSheet) {
     tutorLogSheet = ss.insertSheet(TUTOR_LOG_SHEET_NAME);
-    const headers = ['Timestamp', 'Tutor', 'Student', 'Program', 'Letter', 'Name Status', 'Sound Status', 'Notes'];
+    const headers = ['Timestamp', 'Tutor', 'Student', 'Program', 'Letter', 'Form Status', 'Name Status', 'Sound Status', 'Notes'];
     tutorLogSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     tutorLogSheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
     tutorLogSheet.setFrozenRows(1);

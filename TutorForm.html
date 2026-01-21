@@ -794,6 +794,13 @@
                 const grid = document.createElement('div');
                 grid.className = 'lesson-groups-grid';
                 grid.innerHTML = `
+                    <div class="lesson-group" data-skill="Form">
+                        <div class="lesson-name"><span class="lesson-icon">✍️</span> <span>Letter Form</span></div>
+                        <div class="status-buttons">
+                            <button type="button" class="status-btn" value="Y" onclick="toggleButton(this)" aria-label="Letter form correct"><span class="icon">✅</span> <span class="text">Correct</span></button>
+                            <button type="button" class="status-btn" value="N" onclick="toggleButton(this)" aria-label="Letter form incorrect"><span class="icon">❌</span> <span class="text">Needs Work</span></button>
+                        </div>
+                    </div>
                     <div class="lesson-group" data-skill="Name">
                         <div class="lesson-name"><span class="lesson-icon">🔤</span> <span>Letter Name</span></div>
                         <div class="status-buttons">
@@ -849,20 +856,22 @@
             const tutor = document.getElementById("tutor-select").value;
             const lesson = document.getElementById("lesson-letter").value;
             if (!currentStudent || !tutor || !lesson) { showError("Please select a tutor, student, and lesson."); return; }
-            
+
+            const formButton = document.querySelector('.lesson-group[data-skill="Form"] button[class*="active-"]');
             const nameButton = document.querySelector('.lesson-group[data-skill="Name"] button[class*="active-"]');
             const soundButton = document.querySelector('.lesson-group[data-skill="Sound"] button[class*="active-"]');
-            
+
             const data = {
                 tutor: tutor,
                 student: currentStudent.name,
-                program: currentStudent.program, // This is the important line
+                program: currentStudent.program,
                 lesson: lesson,
-                nameStatus: nameButton ? nameButton.value : "", 
+                formStatus: formButton ? formButton.value : "",
+                nameStatus: nameButton ? nameButton.value : "",
                 soundStatus: soundButton ? soundButton.value : ""
             };
 
-            if (data.nameStatus === "" && data.soundStatus === "") { showError("Please select an assessment for at least one skill."); return; }
+            if (data.formStatus === "" && data.nameStatus === "" && data.soundStatus === "") { showError("Please select an assessment for at least one skill."); return; }
             
             showLoader("Saving session...");
             document.getElementById("save-button").disabled = true;

@@ -33,6 +33,129 @@ const TUTOR_SHEET_NAME = "Tutors";
 const TUTORS_SHEET_NAME = "Tutors"; // Alias for setup wizard
 const TUTOR_LOG_SHEET_NAME = "Tutor Log"; // Corrected name with space
 
+// ====================================================================
+// ============ QUICK FIX FUNCTIONS (Run from Apps Script) ============
+// ====================================================================
+
+/**
+ * QUICK FIX: Creates the Pre-School sheet if it's missing.
+ * Run this directly from the Apps Script editor.
+ */
+function createPreSchoolSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let preSchoolSheet = ss.getSheetByName(PRE_SCHOOL_SHEET_NAME);
+
+  if (preSchoolSheet) {
+    SpreadsheetApp.getUi().alert('Pre-School sheet already exists!');
+    return;
+  }
+
+  preSchoolSheet = ss.insertSheet(PRE_SCHOOL_SHEET_NAME);
+  const headers = ['Name'];
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  headers.push(...letters);
+
+  preSchoolSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  preSchoolSheet.getRange(1, 1, 1, headers.length)
+    .setFontWeight('bold')
+    .setBackground('#1E3A5F')
+    .setFontColor('white');
+  preSchoolSheet.setFrozenRows(1);
+  preSchoolSheet.setFrozenColumns(1);
+  preSchoolSheet.autoResizeColumns(1, headers.length);
+
+  SpreadsheetApp.getUi().alert('Pre-School sheet created successfully!');
+}
+
+/**
+ * QUICK FIX: Creates any missing sheets (Pre-K, Pre-School, Summary, etc.)
+ * Run this directly from the Apps Script editor.
+ */
+function createAllMissingSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const created = [];
+
+  // Pre-K Sheet
+  if (!ss.getSheetByName(PRE_K_SHEET_NAME)) {
+    const sheet = ss.insertSheet(PRE_K_SHEET_NAME);
+    const headers = ['Name'];
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    letters.forEach(letter => {
+      headers.push(`${letter}-Form`, `${letter}-Name`, `${letter}-Sound`);
+    });
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+    sheet.setFrozenRows(1);
+    sheet.setFrozenColumns(1);
+    created.push('Pre-K');
+  }
+
+  // Pre-School Sheet
+  if (!ss.getSheetByName(PRE_SCHOOL_SHEET_NAME)) {
+    const sheet = ss.insertSheet(PRE_SCHOOL_SHEET_NAME);
+    const headers = ['Name'];
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    headers.push(...letters);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+    sheet.setFrozenRows(1);
+    sheet.setFrozenColumns(1);
+    created.push('Pre-School');
+  }
+
+  // Skill Summary Page
+  if (!ss.getSheetByName(SUMMARY_SHEET_NAME)) {
+    const sheet = ss.insertSheet(SUMMARY_SHEET_NAME);
+    const headers = ['Name', 'Program', 'Pre-School In-Progress', 'Pre-School Cumulative',
+      'Form In-Progress', 'Form Cumulative', 'Name In-Progress', 'Name Cumulative',
+      'Sound In-Progress', 'Sound Cumulative'];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+    sheet.setFrozenRows(1);
+    created.push('Skill Summary Page');
+  }
+
+  // Roster
+  if (!ss.getSheetByName(ROSTER_SHEET_NAME)) {
+    const sheet = ss.insertSheet(ROSTER_SHEET_NAME);
+    sheet.getRange(1, 1, 1, 3).setValues([['Name', 'Group', 'Program']]);
+    sheet.getRange(1, 1, 1, 3).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+    created.push('Roster');
+  }
+
+  // Tutors
+  if (!ss.getSheetByName(TUTORS_SHEET_NAME)) {
+    const sheet = ss.insertSheet(TUTORS_SHEET_NAME);
+    sheet.getRange(1, 1, 1, 2).setValues([['Name', 'Role']]);
+    sheet.getRange(1, 1, 1, 2).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+    created.push('Tutors');
+  }
+
+  // Tutor Log
+  if (!ss.getSheetByName(TUTOR_LOG_SHEET_NAME)) {
+    const sheet = ss.insertSheet(TUTOR_LOG_SHEET_NAME);
+    const headers = ['Timestamp', 'Tutor', 'Student', 'Program', 'Letter', 'Name Status', 'Sound Status', 'Notes'];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+    sheet.setFrozenRows(1);
+    created.push('Tutor Log');
+  }
+
+  // Pacing
+  if (!ss.getSheetByName(PACING_SHEET_NAME)) {
+    const sheet = ss.insertSheet(PACING_SHEET_NAME);
+    sheet.getRange(1, 1, 1, 3).setValues([['Group', 'Current Letter', 'Student Count']]);
+    sheet.getRange(1, 1, 1, 3).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
+    created.push('Pacing');
+  }
+
+  if (created.length > 0) {
+    SpreadsheetApp.getUi().alert('Created sheets:\n\n• ' + created.join('\n• '));
+  } else {
+    SpreadsheetApp.getUi().alert('All sheets already exist!');
+  }
+}
+
 
 // ====================================================================
 // ============ MAIN WEB APP & MENU FUNCTIONS =========================

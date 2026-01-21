@@ -314,6 +314,13 @@
                 border: 1px solid var(--border);
             }
         }
+        /* Portal Navigation */
+        .portal-nav { background: rgba(255,255,255,0.1); padding: 0.5rem 1rem; display: flex; justify-content: center; gap: 0.25rem; flex-wrap: wrap; }
+        .portal-nav a { color: rgba(255,255,255,0.7); text-decoration: none; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.85rem; font-weight: 500; transition: all 0.3s ease; cursor: pointer; }
+        .portal-nav a:hover { background: rgba(255,255,255,0.1); color: white; }
+        .portal-nav a.active { background: rgba(255,255,255,0.2); color: white; font-weight: 600; }
+        .portal-nav .nav-home { color: #E8B923; }
+        .portal-nav .nav-home:hover { background: rgba(232,185,35,0.2); }
     </style>
 </head>
 <body>
@@ -327,6 +334,12 @@
         </div>
         <div class="header-badge">Executive Dashboard</div>
     </header>
+    <nav class="portal-nav">
+        <a onclick="navigateToPortal('')" class="nav-home">Portal Home</a>
+        <a onclick="navigateToPortal('teacher')">Teacher</a>
+        <a onclick="navigateToPortal('tutor')">Tutor</a>
+        <a class="active">Dashboard</a>
+    </nav>
 
     <div class="container">
         <div id="loading" class="loading">
@@ -400,6 +413,13 @@
     </div>
 
     <script>
+        // --- Portal Navigation ---
+        function navigateToPortal(page) {
+            google.script.run.withSuccessHandler(function(url) {
+                window.top.location.href = page ? url + '?page=' + page : url;
+            }).getWebAppUrl();
+        }
+
         // Load Google Charts
         google.charts.load('current', {'packages':['corechart', 'bar']});
         google.charts.setOnLoadCallback(initDashboard);

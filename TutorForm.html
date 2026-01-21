@@ -585,6 +585,13 @@
             font-weight: 600;
             margin-left: 0.5rem;
         }
+        /* Portal Navigation */
+        .portal-nav { background: #B8960E; padding: 0.5rem 1rem; display: flex; justify-content: center; gap: 0.25rem; flex-wrap: wrap; }
+        .portal-nav a { color: rgba(30,58,95,0.7); text-decoration: none; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.85rem; font-weight: 500; transition: var(--transition); cursor: pointer; }
+        .portal-nav a:hover { background: rgba(30,58,95,0.1); color: var(--primary-color); }
+        .portal-nav a.active { background: rgba(30,58,95,0.2); color: var(--primary-color); font-weight: 600; }
+        .portal-nav .nav-home { color: var(--primary-color); font-weight: 600; }
+        .portal-nav .nav-home:hover { background: rgba(30,58,95,0.15); }
     </style>
 </head>
 <body>
@@ -600,6 +607,12 @@
             <div class="header-badge">Tutor Portal</div>
         </div>
     </header>
+    <nav class="portal-nav">
+        <a onclick="navigateToPortal('')" class="nav-home">Portal Home</a>
+        <a onclick="navigateToPortal('teacher')">Teacher</a>
+        <a class="active">Tutor</a>
+        <a onclick="navigateToPortal('dashboard')">Dashboard</a>
+    </nav>
 
     <div class="container">
         <section aria-label="Session Setup">
@@ -652,7 +665,14 @@
     </div>
 
     <script>
-        let studentRoster = []; 
+        // --- Portal Navigation ---
+        function navigateToPortal(page) {
+            google.script.run.withSuccessHandler(function(url) {
+                window.top.location.href = page ? url + '?page=' + page : url;
+            }).getWebAppUrl();
+        }
+
+        let studentRoster = [];
         let currentStudent = null;
 
         document.addEventListener("DOMContentLoaded", () => {

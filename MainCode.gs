@@ -46,14 +46,14 @@ function createPreSchoolSheet() {
   let preSchoolSheet = ss.getSheetByName(PRE_SCHOOL_SHEET_NAME);
 
   if (preSchoolSheet) {
-    SpreadsheetApp.getUi().alert('Pre-School sheet already exists!');
+    SpreadsheetApp.getUi().alert('Pre-School sheet already exists! Use fixPreSchoolHeaders() to update headers.');
     return;
   }
 
   preSchoolSheet = ss.insertSheet(PRE_SCHOOL_SHEET_NAME);
   const headers = ['Name'];
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  headers.push(...letters);
+  letters.forEach(letter => headers.push(`Letter Sound ${letter}`));
 
   preSchoolSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   preSchoolSheet.getRange(1, 1, 1, headers.length)
@@ -65,6 +65,33 @@ function createPreSchoolSheet() {
   preSchoolSheet.autoResizeColumns(1, headers.length);
 
   SpreadsheetApp.getUi().alert('Pre-School sheet created successfully!');
+}
+
+/**
+ * QUICK FIX: Updates the Pre-School sheet headers to "Letter Sound A" format.
+ * Run this to fix an existing Pre-School sheet.
+ */
+function fixPreSchoolHeaders() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const preSchoolSheet = ss.getSheetByName(PRE_SCHOOL_SHEET_NAME);
+
+  if (!preSchoolSheet) {
+    SpreadsheetApp.getUi().alert('Pre-School sheet not found! Use createPreSchoolSheet() first.');
+    return;
+  }
+
+  const headers = ['Name'];
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  letters.forEach(letter => headers.push(`Letter Sound ${letter}`));
+
+  preSchoolSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  preSchoolSheet.getRange(1, 1, 1, headers.length)
+    .setFontWeight('bold')
+    .setBackground('#1E3A5F')
+    .setFontColor('white');
+  preSchoolSheet.autoResizeColumns(1, headers.length);
+
+  SpreadsheetApp.getUi().alert('Pre-School headers updated to "Letter Sound A" through "Letter Sound Z"!');
 }
 
 /**
@@ -95,7 +122,7 @@ function createAllMissingSheets() {
     const sheet = ss.insertSheet(PRE_SCHOOL_SHEET_NAME);
     const headers = ['Name'];
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-    headers.push(...letters);
+    letters.forEach(letter => headers.push(`Letter Sound ${letter}`));
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
     sheet.setFrozenRows(1);
@@ -1588,10 +1615,10 @@ function initializeDataSheets(ss, selectedPrograms) {
     let preSchoolSheet = ss.getSheetByName(PRE_SCHOOL_SHEET_NAME);
     if (!preSchoolSheet) {
       preSchoolSheet = ss.insertSheet(PRE_SCHOOL_SHEET_NAME);
-      // Setup headers: Name, A, B, C, etc.
+      // Setup headers: Name, Letter Sound A, Letter Sound B, etc.
       const headers = ['Name'];
       const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-      headers.push(...letters);
+      letters.forEach(letter => headers.push(`Letter Sound ${letter}`));
       preSchoolSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
       preSchoolSheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#1E3A5F').setFontColor('white');
       preSchoolSheet.setFrozenRows(1);

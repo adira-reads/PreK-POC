@@ -126,6 +126,136 @@ function fixSummaryHeaders() {
 }
 
 /**
+ * QUICK FIX: Recalculates all summaries using the correct sheet structure.
+ * Run this if calculateAllSummaries shows 0% for Pre-K students.
+ * Works with sheets created by the Setup Wizard (headers in row 1, data in row 2+).
+ */
+function fixCalculateSummaries() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const summarySheet = ss.getSheetByName(SUMMARY_SHEET_NAME);
+  const rosterSheet = ss.getSheetByName(ROSTER_SHEET_NAME);
+  const preSchoolSheet = ss.getSheetByName(PRE_SCHOOL_SHEET_NAME);
+  const preKSheet = ss.getSheetByName(PRE_K_SHEET_NAME);
+
+  if (!summarySheet) {
+    SpreadsheetApp.getUi().alert("Error: 'Skill Summary Page' not found.");
+    return;
+  }
+
+  // Get roster data (Name -> Program mapping)
+  const rosterData = rosterSheet.getDataRange().getValues();
+  const rosterMap = new Map(rosterData.slice(1).map(row => [row[0], row[2]]));
+
+  // Get Pre-School data (headers in row 1, data starts row 2)
+  let preSchoolMap = new Map();
+  if (preSchoolSheet) {
+    const psData = preSchoolSheet.getDataRange().getValues();
+    // Row 0 is headers, data starts at row 1
+    for (let i = 1; i < psData.length; i++) {
+      if (psData[i][0]) {
+        preSchoolMap.set(psData[i][0], psData[i]);
+      }
+    }
+  }
+
+  // Get Pre-K data (headers in row 1, data starts row 2)
+  let preKMap = new Map();
+  let preKHeaders = [];
+  if (preKSheet) {
+    const pkData = preKSheet.getDataRange().getValues();
+    preKHeaders = pkData[0]; // Headers are in row 1 (index 0)
+    // Data starts at row 2 (index 1)
+    for (let i = 1; i < pkData.length; i++) {
+      if (pkData[i][0]) {
+        preKMap.set(pkData[i][0], pkData[i]);
+      }
+    }
+  }
+
+  // Clear existing summary data (except headers)
+  const lastRow = summarySheet.getLastRow();
+  if (lastRow > 1) {
+    summarySheet.getRange(2, 1, lastRow - 1, SUMMARY_LAST_COL).clear();
+  }
+
+  // Build output data for all students in roster
+  const outputData = [];
+  for (const [studentName, program] of rosterMap) {
+    if (!studentName) continue;
+
+    let psInProgress = "", psCumulative = "";
+    let pkFormInProgress = "", pkFormCumulative = "";
+    let pkNameInProgress = "", pkNameCumulative = "";
+    let pkSoundInProgress = "", pkSoundCumulative = "";
+
+    if (program === "Pre-School") {
+      const studentData = preSchoolMap.get(studentName);
+      if (studentData) {
+        // Pre-School: columns 1-26 are Letter Sound A-Z (index 1 to 26)
+        let yCount = 0, nCount = 0;
+        for (let i = 1; i <= 26 && i < studentData.length; i++) {
+          const val = studentData[i];
+          if (val === "Y") yCount++;
+          else if (val === "N") nCount++;
+        }
+        psInProgress = (yCount + nCount === 0) ? 0 : (yCount / (yCount + nCount));
+        psCumulative = yCount / TOTAL_LESSONS;
+      }
+    } else if (program === "Pre-K") {
+      const studentData = preKMap.get(studentName);
+      if (studentData) {
+        // Pre-K headers: Name, A-Form, A-Name, A-Sound, B-Form, B-Name, B-Sound, ...
+        let formY = 0, formN = 0;
+        let nameY = 0, nameN = 0;
+        let soundY = 0, soundN = 0;
+
+        for (let i = 1; i < preKHeaders.length; i++) {
+          const header = preKHeaders[i] || "";
+          const val = studentData[i];
+
+          if (header.endsWith("-Form")) {
+            if (val === "Y") formY++;
+            else if (val === "N") formN++;
+          } else if (header.endsWith("-Name")) {
+            if (val === "Y") nameY++;
+            else if (val === "N") nameN++;
+          } else if (header.endsWith("-Sound")) {
+            if (val === "Y") soundY++;
+            else if (val === "N") soundN++;
+          }
+        }
+
+        pkFormInProgress = (formY + formN === 0) ? 0 : (formY / (formY + formN));
+        pkFormCumulative = formY / TOTAL_LESSONS;
+
+        pkNameInProgress = (nameY + nameN === 0) ? 0 : (nameY / (nameY + nameN));
+        pkNameCumulative = nameY / TOTAL_LESSONS;
+
+        pkSoundInProgress = (soundY + soundN === 0) ? 0 : (soundY / (soundY + soundN));
+        pkSoundCumulative = soundY / TOTAL_LESSONS;
+      }
+    }
+
+    outputData.push([
+      studentName, program,
+      psInProgress, psCumulative,
+      pkFormInProgress, pkFormCumulative,
+      pkNameInProgress, pkNameCumulative,
+      pkSoundInProgress, pkSoundCumulative
+    ]);
+  }
+
+  // Write all data
+  if (outputData.length > 0) {
+    summarySheet.getRange(2, 1, outputData.length, 10).setValues(outputData);
+    // Format percentage columns (C through J)
+    summarySheet.getRange(2, 3, outputData.length, 8).setNumberFormat("0.0%");
+  }
+
+  SpreadsheetApp.getUi().alert("Success!", `Skill Summary updated for ${outputData.length} students.`, SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+/**
  * QUICK FIX: Creates any missing sheets (Pre-K, Pre-School, Summary, etc.)
  * Run this directly from the Apps Script editor.
  */
